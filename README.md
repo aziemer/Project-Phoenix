@@ -7,7 +7,9 @@ After a lot of unsuccessful repair attempts, I searched the internet and found [
 
 He provided me with some software, that showed that my device's hardware was not broken - its firmware obviously "just" failed.
 
-As my DMM now was already open, modified (I needed to reflash the MCU via SWD - btw. firmware uploads via RS232 were not even possible with the original firmware). One of Petteris statements on his site was, that he would like to write a replacement firmware for the OWON - so here it goes...
+As my DMM now was already open, modified (I needed to reflash the MCU via SWD - btw. firmware uploads via RS232 were not even possible with the original firmware), and one of Petteri's statements on his site was, that he would like to write a replacement firmware for the OWON, I thought: why not start it myself.
+
+So here it goes...
 
 I started with a new bootloader (in another project), based on the STM32Duino bootloader. Now I can upload new firmware via USB, which involved adding the non-populated USB Socket on the back and changing some resistors.
 
