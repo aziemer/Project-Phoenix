@@ -86,6 +86,7 @@ enum DM_SCALE {
 	SCALE_AC_5A,
 	SCALE_AC_10A,
 
+	SCALE_50_Ohm,
 	SCALE_500_Ohm,
 	SCALE_5_kOhm,
 	SCALE_50_kOhm,

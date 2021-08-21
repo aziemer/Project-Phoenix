@@ -177,6 +177,16 @@ MENU Menu[] = {
 			{ NULL,				NULL,		0,	NULL,		0 },
 			{ NULL,				NULL,		0,	NULL,		0 }
 		}
+	},
+	{
+		"Frequency",	7, 1,
+		{
+			{ NULL,				NULL,		0,	NULL,		0 },
+			{ NULL,				NULL,		0,	NULL,		0 },
+			{ NULL,				NULL,		0,	NULL,		0 },
+			{ NULL,				NULL,		0,	NULL,		0 },
+			{ NULL,				NULL,		0,	NULL,		0 }
+		}
 	}
 };
 
@@ -297,7 +307,7 @@ static void DrawFooter( char *msg, ... )
 
 static void DrawValue( void )
 {
-	uint8_t scale, pbErr;
+	uint8_t scale, mode, pbErr;
 	double dScaleFact, dFullScale, Val;
 	char szValue[PREC+1] = "";
 	char szUnitPrefix[10] = "";
@@ -307,18 +317,23 @@ static void DrawValue( void )
 	if( hold ) return;
 
 	scale = DMM_GetCurrentScale();
+	mode = DMM_GetCurrentMode();
 	pbErr = DMM_GetScaleUnit( scale, &dScaleFact, szUnitPrefix, NULL, NULL );
 	if( pbErr == ERRVAL_SUCCESS )
 	{
 		dFullScale = DMM_GetRange( scale );
 		Val = dMeasuredVal[0] * dScaleFact;
-
+#if 0
 		if( Val > 1.1 * dFullScale )
 			strcpy( szValue, "+++++++" );
 		if( Val < -1.1 * dFullScale )
 			strcpy( szValue, "-------" );
 		else
-			snprintf( szValue, PREC, "%+1.4f", Val );
+#endif
+			if( mode == DmmCapacitance || mode == DmmFrequency )
+				snprintf( szValue, PREC, "%1.5f", Val );
+			else
+				snprintf( szValue, PREC, "%+1.4f", Val );
 	}
 
 	if( pbErr != ERRVAL_SUCCESS )
@@ -341,13 +356,17 @@ static void DrawValue( void )
 		{
 			dFullScale = DMM_GetRange( scale );
 			Val = dMeasuredVal[1] * dScaleFact;
-
+#if 0
 			if( Val > 1.1 * dFullScale )
 				strcpy( szValue, "+++++++" );
 			if( Val < -1.1 * dFullScale )
 				strcpy( szValue, "-------" );
 			else
-				snprintf( szValue, PREC, "%+1.4f", Val );
+#endif
+				if( mode == DmmCapacitance || mode == DmmFrequency )
+					snprintf( szValue, PREC, "%1.5f", Val );
+				else
+					snprintf( szValue, PREC, "%+1.4f", Val );
 		}
 
 		if( pbErr != ERRVAL_SUCCESS )
@@ -370,13 +389,17 @@ static void DrawValue( void )
 		{
 			dFullScale = DMM_GetRange( scale );
 			Val = dMeasuredVal[1] * dScaleFact;
-
+#if 0
 			if( Val > 1.1 * dFullScale )
 				strcpy( szValue, "+++++++" );
 			if( Val < -1.1 * dFullScale )
 				strcpy( szValue, "-------" );
 			else
-				snprintf( szValue, PREC, "%+1.4f", Val );
+#endif
+				if( mode == DmmCapacitance || mode == DmmFrequency )
+					snprintf( szValue, PREC, "%1.5f", Val );
+				else
+					snprintf( szValue, PREC, "%+1.4f", Val );
 		}
 
 		if( pbErr != ERRVAL_SUCCESS )
@@ -581,6 +604,8 @@ static void SetScale( int scale )
 		SetAuto( 0 );
 		if( DMM_GetMode( curScale - 1 ) == curMode )
 			scale = curScale - 1;
+		else
+			scale = curScale;
 		break;
 
 	case SCALE_ALT:		// AC<->DC, Ohm->Continuity->Diode->Ohm
@@ -632,9 +657,11 @@ static void SetScale( int scale )
 		if( scale > -1 )
 		{
 			curMode = DMM_GetCurrentMode();
-//			if( curMode == DmmCapacitance )		// debug counter values
-//				dualmode = 2;
-//			else
+			if( curMode == DmmCapacitance )		// debug counter values
+				dualmode = 2;
+			else if( curMode == DmmFrequency )	// debug counter values
+				dualmode = 1;
+			else
 				dualmode = 0;
 
 			TFT_setForeGround( BACKGROUND_COLOR );
@@ -694,8 +721,8 @@ static void SetScale( int scale )
 		case DmmContinuity:		menu = 4; break;
 		case DmmDiode:			menu = 5; break;
 		case DmmCapacitance:	menu = 6; break;
+		case DmmFrequency:		menu = 7; break;
 
-		case DmmFrequency:
 		case DmmTemperature:
 		default:				break;
 		}
@@ -747,14 +774,10 @@ void Application( void )
 			switch( key )
 			{
 			// below display
-			case KEY_VOLT:	SetScale( ( curMode == DmmDCVoltage || curMode == DmmACVoltage ) ? SCALE_ALT : SCALE_DC_1kV ); break;
-			case KEY_AMP:	SetScale( ( curMode == DmmDCCurrent || curMode == DmmACCurrent ) ? SCALE_ALT : SCALE_DC_10A ); break;
+			case KEY_VOLT:	SetScale( ( curMode == DmmDCVoltage || curMode == DmmACVoltage ) ? SCALE_ALT : SCALE_DC_50V ); break;
+			case KEY_AMP:	SetScale( ( curMode == DmmDCCurrent || curMode == DmmACCurrent ) ? SCALE_ALT : SCALE_DC_500mA ); break;
 			case KEY_OHM:	SetScale( ( curMode == DmmResistance || curMode == DmmResistance4W || curMode == DmmDiode || curMode == DmmContinuity ) ? SCALE_ALT : SCALE_500_Ohm ); break;
-//			case KEY_CAP:	SetScale( SCALE_50_nF ); break;
-			case KEY_CAP:	break;			// not working
-//			case KEY_FREQ:	SetScale( SCALE_FREQ ); break;
-			case KEY_FREQ:	break;			// not working
-			case KEY_TEMP:	SetScale( SCALE_TEMP ); break;
+			case KEY_FREQ:	SetScale( SCALE_FREQ ); break;
 
 			// soft keys right
 			case KEY_F1:	MenuFunction( 1 ); break;
@@ -769,20 +792,21 @@ void Application( void )
 			case KEY_RANGE:	SetScale( SCALE_AUTO ); break;
 			case KEY_UP:	SetScale( SCALE_UP ); break;
 			case KEY_DOWN:	SetScale( SCALE_DOWN ); break;
+
+			default:		break;
+#if 0
+			case KEY_CAP:	SetScale( SCALE_50_nF ); break;
+			case KEY_TEMP:	SetScale( SCALE_TEMP ); break;
 			case KEY_LEFT:	break;
 			case KEY_RIGHT:	break;
-
 			case KEY_DUAL:	break;
 			case KEY_EXIT:	break;
-
 			case KEY_MATH:	break;
-
 			case KEY_SAVE:	break;
 			case KEY_REC:	break;
-
 			case KEY_PORT:	break;
-
 			case KEY_UTIL:	break;
+#endif
 			}
 		}
 		last_key = key;
