@@ -632,9 +632,9 @@ static void SetScale( int scale )
 		if( scale > -1 )
 		{
 			curMode = DMM_GetCurrentMode();
-			if( curMode == DmmCapacitance )
-				dualmode = 2;
-			else
+//			if( curMode == DmmCapacitance )		// debug counter values
+//				dualmode = 2;
+//			else
 				dualmode = 0;
 
 			TFT_setForeGround( BACKGROUND_COLOR );
@@ -750,8 +750,10 @@ void Application( void )
 			case KEY_VOLT:	SetScale( ( curMode == DmmDCVoltage || curMode == DmmACVoltage ) ? SCALE_ALT : SCALE_DC_1kV ); break;
 			case KEY_AMP:	SetScale( ( curMode == DmmDCCurrent || curMode == DmmACCurrent ) ? SCALE_ALT : SCALE_DC_10A ); break;
 			case KEY_OHM:	SetScale( ( curMode == DmmResistance || curMode == DmmResistance4W || curMode == DmmDiode || curMode == DmmContinuity ) ? SCALE_ALT : SCALE_500_Ohm ); break;
-			case KEY_CAP:	SetScale( SCALE_50_nF ); break;
-			case KEY_FREQ:	SetScale( SCALE_FREQ ); break;
+//			case KEY_CAP:	SetScale( SCALE_50_nF ); break;
+			case KEY_CAP:	break;			// not working
+//			case KEY_FREQ:	SetScale( SCALE_FREQ ); break;
+			case KEY_FREQ:	break;			// not working
 			case KEY_TEMP:	SetScale( SCALE_TEMP ); break;
 
 			// soft keys right
