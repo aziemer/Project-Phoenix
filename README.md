@@ -25,13 +25,14 @@ What works:
 
 * TFT routines
 * keypad scanning
-* V / I / R / Diode / Continuity (no buzz yet)
+* Measurement of U / I / R / Diode / Continuity (no buzz yet). Displayed values are __UNCALIBRATED__.
+* Frequency
 
 What does not (yet) work:
 
 * Capacitance measurement (need to figure out how the values are processed)
-* Frequency measurement
 * Temperature measurement
+
 
 
 **Development based on and using ideas and code snippets from:**
