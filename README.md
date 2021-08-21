@@ -18,6 +18,7 @@ Missing steps:
 * add calibration functions
 * finish the menu functions
 * add SCPI module, including calibration commands
+* add all the other functions ;-)
 
 
 What works:
