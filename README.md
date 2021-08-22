@@ -13,26 +13,33 @@ So here it goes...
 
 I started with a new bootloader (in another project), based on the STM32Duino bootloader. Now I can upload new firmware via USB, which involved adding the non-populated USB Socket on the back and changing some resistors.
 
-Missing steps:
-
-* add calibration functions
-* finish the menu functions
-* add SCPI module, including calibration commands
-* add all the other functions ;-)
-
-
 What works:
 
 * TFT routines
 * keypad scanning
-* Measurement of U / I / R / Diode / Continuity (no buzz yet). Displayed values are __UNCALIBRATED__.
+* Measurement of U / I / R / Diode / Continuity (no buzzer yet). Displayed values are __UNCALIBRATED__.
 * Frequency
 
 What does not (yet) work:
 
+* Calibration
+* the menu functions
+* SCPI module (with calibration commands)
+* add all the other functions ;-)
 * Capacitance measurement (need to figure out how the values are processed)
 * Temperature measurement
 
+
+To install the firmware on the device, the BOOT0 pin has to pulled up (i.e. by shorting Pin 4 and 6 of the connector CO2 on the front PCB), the upload via STM-Cube programmer (or the programmer of your coice) over RS232.
+
+There are 2 defines to be checked in the makefile:
+
+* BOOTLOADER=x - 0 or 1
+* CRYSTAL=xxxxx - your HY3131 crystal frequency
+
+BOOTLOADER=1 excludes the TFT initialization, as this is done in the bootloader. CODE starts at 0x8002000.
+
+BOOTLOADER=0 includes the TFT init, CODE starts at 0x8000000.
 
 
 **Development based on and using ideas and code snippets from:**
