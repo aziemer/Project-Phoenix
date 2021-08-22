@@ -17,86 +17,11 @@
 #include "gpio.h"
 #include "tft.h"
 #include "kbd.h"
+#include "scpi.h"
 
 #include "dmm.h"
 #include "calib.h"
-
-const char GREETING_MESSAGE[] = "Project Phoenix DMM v1.0\n";
-
-#define	SPACING					5		// hor. and vert.
-
-#define PREC					8
-
-#define BACKGROUND_COLOR		RGB(0,0,0)
-
-#define HEADER_WIDTH			( TFT_WIDTH - 1 )
-#define HEADER_HEIGHT			29
-#define HEADER_FONT				FONT_16X24
-#define HEADER_COLOR			RGB(66,66,66)
-#define HEADER_TEXT_COLOR		RGB(0,0,0)
-
-#define BUTTON_WIDTH			100
-#define	BUTTON_HEIGHT			( ( TFT_HEIGHT - HEADER_HEIGHT - 5 * SPACING ) / 5 - 1 )
-#define	BUTTON_XPOS				( TFT_WIDTH - BUTTON_WIDTH - 1 )
-#define	BUTTON_YPOS(n)			( HEADER_HEIGHT + SPACING + (n) * ( BUTTON_HEIGHT + SPACING ) )
-#define BUTTON_FONT1			FONT_16X24
-#define BUTTON_FONT2			FONT_10X16
-#define BUTTON_COLOR			RGB(66,66,66)
-#define BUTTON_VALUE_COLOR		RGB(90,90,90)
-#define BUTTON_TEXT_COLOR		RGB(0,0,0)
-
-#define FOOTER_FONT				FONT_16X24
-#define FOOTER_COLOR			RGB(66,66,66)
-#define FOOTER_TEXT_COLOR		RGB(0,0,0)
-
-// 1st measurement (main maesurement)
-#define VALUE1_FONT				FONT_32X50
-#define VALUE1_XPOS				10
-#define VALUE1_YPOS				140
-#define VALUE1_COLOR			RGB(99,66,0)
-
-#define UNIT1_FONT				FONT_16X24
-#define UNIT1_XPOS				(VALUE1_XPOS+250)
-#define UNIT1_YPOS				(VALUE1_YPOS-2)
-#define UNIT1_COLOR				RGB(99,66,0)
-
-// 2nd measurement (ACV/ACA/FREQ -> Duty)
-#define VALUE2_FONT				FONT_16X24
-#define VALUE2_XPOS				VALUE1_XPOS
-#define VALUE2_YPOS				190
-#define VALUE2_COLOR			RGB(99,66,0)
-
-#define UNIT2_FONT				FONT_10X16
-#define UNIT2_XPOS				(VALUE2_XPOS+60)
-#define UNIT2_YPOS				VALUE2_YPOS
-#define UNIT2_COLOR				RGB(99,66,0)
-
-// 3rd measurement (AC V/I -> Freq, FREQ -> V)
-#define VALUE3_FONT				FONT_16X24
-#define VALUE3_XPOS				((TFT_WIDTH-20-BUTTON_XPOS)/2)
-#define VALUE3_YPOS				180
-#define VALUE3_COLOR			RGB(99,66,0)
-
-#define UNIT3_FONT				FONT_10X16
-#define UNIT3_XPOS				(VALUE3_XPOS+50)
-#define UNIT3_YPOS				VALUE3_YPOS
-#define UNIT3_COLOR				RGB(99,66,0)
-
-// TIME
-#define TIME_FONT				FONT_10X16
-#define TIME_COLOR				RGB(0,0,0)
-
-#define INDICATOR_ON_COLOR		RGB(0,99,0)
-#define INDICATOR_OFF_COLOR		RGB(33,33,33)
-
-#define HOLD_XPOS				10
-#define HOLD_YPOS				( HEADER_HEIGHT + 20 )
-#define HOLD_FONT				FONT_10X16
-
-#define AUTO_YPOS				( HEADER_HEIGHT + 20 )
-#define AUTO_FONT				FONT_10X16
-
-#define START_REPEAT			5
+#include "application.h"
 
 typedef void (*CALLBACK)(uint8_t,int);
 
@@ -116,9 +41,7 @@ typedef struct {
 	BUTTON button[5];
 } MENU;
 
-static void SetScale(uint8_t,int);
-
-MENU Menu[] = {
+static MENU Menu[] = {
 	{
 		"Voltage",		1, 1,
 		{
@@ -191,7 +114,7 @@ MENU Menu[] = {
 	}
 };
 
-MENU *curMenu = NULL;
+static MENU *curMenu = NULL;
 
 static uint8_t hold = 0;
 static uint8_t autorange = 1;
@@ -416,7 +339,7 @@ static void DrawValue( void )
 //	DrawDot( VGA_LIME );
 }
 
-static void SetHold( int mode )
+void SetHold( int mode )
 {
 	switch( mode )
 	{
@@ -433,7 +356,7 @@ static void SetHold( int mode )
 	TFT_printf( "HOLD" );
 }
 
-static void SetAuto( int mode )
+void SetAuto( int mode )
 {
 	switch( mode )
 	{
@@ -575,7 +498,7 @@ static int findScale( uint8_t mode, double fsr )	// AC<->DC, 2W<->4W
 	return -1;
 }
 
-static void SetScale( uint8_t channel, int scale )
+void SetScale( uint8_t channel, int scale )
 {
 	int curScale = DMM_GetScale( channel );
 	int curMode = DMM_GetMode( curScale );
@@ -612,8 +535,8 @@ static void SetScale( uint8_t channel, int scale )
 		switch( curMode )
 		{
 		case DmmResistance:		scale = SCALE_4W_500_Ohm; break;
-		case DmmResistance4W:	scale = SCALE_Continuity; break;
-		case DmmContinuity:		scale = SCALE_Diode; break;
+		case DmmResistance4W:	scale = SCALE_CONT; break;
+		case DmmContinuity:		scale = SCALE_DIODE; break;
 		case DmmDiode:			scale = SCALE_500_Ohm; break;
 
 		case DmmDCVoltage:
@@ -759,10 +682,10 @@ void Application( void )
 	SetScale( 1, SCALE_DC_1kV );
 	SetAuto( 1 );
 
-	HAL_UART_Transmit( &huart1, (uint8_t*)GREETING_MESSAGE, sizeof(GREETING_MESSAGE)-1, 1000 );	// 115200,8N1
-
 	for(;;)
 	{
+		Do_SCPI();
+
 		DrawTime();
 
 		if( DMM_Measure( 1, 0, 1 ) == ERRVAL_SUCCESS )		// channel1, scaled value, averaging = 1 (no)

@@ -110,8 +110,8 @@ enum DM_SCALE {
 
 	SCALE_TEMP,
 
-	SCALE_Continuity,
-	SCALE_Diode,
+	SCALE_CONT,
+	SCALE_DIODE,
 
 	DMM_CNTSCALES,
 

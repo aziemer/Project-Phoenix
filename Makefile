@@ -48,6 +48,7 @@ Core/Src/kbd.c \
 Core/Src/application.c \
 Core/Src/dmm.c \
 Core/Src/calib.c \
+Core/Src/scpi.c \
 Core/Src/stm32f1xx_it.c \
 Core/Src/stm32f1xx_hal_msp.c \
 USB_DEVICE/App/usb_device.c \
