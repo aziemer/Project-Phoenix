@@ -39,9 +39,7 @@
 #include "dmm.h"
 #include "calib.h"
 
-CALIBDATA calib = {
-	{0,},
-};											// global variable - also visible in dmm.c (where declared as extern)
+CALIBDATA calib;							// global variable - also visible in dmm.c (where declared as extern)
 
 static PARTCALIBDATA partCalib;				// used to store calibration related values, until all the needed calibration data is present and calibration can be finalized.
 
@@ -110,8 +108,9 @@ static uint8_t CALIB_ReadAllCalibsFromEPROM( void )
 {
 	uint8_t bResult = ERRVAL_SUCCESS;
 
-	// TODO - for now, all calibration data MUST be set in the calib struct, either real values or zero - default values (mult=1.0, add=0.0) are inserted then
+	// TODO
 //	bResult = ReadCalibsFromEPROM();
+	memset( &calib, 0, sizeof(calib) );
 
 	CALIB_ReplaceCalibNullValues();
 	return bResult;
@@ -242,12 +241,12 @@ float CALIB_ComputeAdd( int idxScale )
 uint8_t CALIB_MeasureForCalibZeroVal( double *pMeasuredVal )
 {
 	double dVal = NAN;
-	int idxScale = DMM_GetCurrentScale();
+	int idxScale = DMM_GetScale( 1 );
 	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxScale );
 	if( bResult == ERRVAL_SUCCESS )
 	{
 		DMM_SetUseCalib( 0 );
-		dVal = DMM_DGetAvgValue( MEASURE_CNT_AVG, &bResult ); // compute average value
+		dVal = DMM_DGetAvgValue( 1, MEASURE_CNT_AVG, &bResult ); // compute average value
 		DMM_SetUseCalib( 1 );
 
 		if( bResult == ERRVAL_SUCCESS )
@@ -290,7 +289,7 @@ uint8_t CALIB_MeasureForCalibZeroVal( double *pMeasuredVal )
  */
 uint8_t CALIB_CalibOnZero( double *pMeasuredVal )
 {
-	int idxScale = DMM_GetCurrentScale();
+	int idxScale = DMM_GetScale( 1 );
 	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxScale );
 	// do the measurement now
 	if( bResult == ERRVAL_SUCCESS )
@@ -338,12 +337,12 @@ uint8_t CALIB_CalibOnZero( double *pMeasuredVal )
 uint8_t CALIB_MeasureForCalibPositiveVal( double *pMeasuredVal )
 {
 	double dVal = NAN;
-	int idxScale = DMM_GetCurrentScale();
+	int idxScale = DMM_GetScale( 1 );
 	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxScale );
 	if( bResult == ERRVAL_SUCCESS )
 	{
 		DMM_SetUseCalib( 0 );
-		dVal = DMM_DGetAvgValue( MEASURE_CNT_AVG, &bResult ); // compute and get average value
+		dVal = DMM_DGetAvgValue( 1, MEASURE_CNT_AVG, &bResult ); // compute and get average value
 		DMM_SetUseCalib( 1 );
 
 		if( bResult == ERRVAL_SUCCESS )
@@ -394,7 +393,7 @@ uint8_t CALIB_MeasureForCalibPositiveVal( double *pMeasuredVal )
  */
 uint8_t CALIB_CalibOnPositive( double dRefVal, double *pMeasuredVal, uint8_t bEarlyMeasurement )
 {
-	int idxScale = DMM_GetCurrentScale();
+	int idxScale = DMM_GetScale( 1 );
 	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxScale );
 	if( !bEarlyMeasurement )
 	{
@@ -456,12 +455,12 @@ uint8_t CALIB_CalibOnPositive( double dRefVal, double *pMeasuredVal, uint8_t bEa
 uint8_t CALIB_MeasureForCalibNegativeVal( double *pMeasuredVal )
 {
 	double dVal = NAN;
-	int idxScale = DMM_GetCurrentScale();
+	int idxScale = DMM_GetScale( 1 );
 	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxScale );
 	if( bResult == ERRVAL_SUCCESS )
 	{
 		DMM_SetUseCalib( 0 );
-		dVal = DMM_DGetAvgValue( 20, &bResult );   // aquire average value
+		dVal = DMM_DGetAvgValue( 1, 20, &bResult );   // aquire average value
 		DMM_SetUseCalib( 1 );
 
 		if( bResult == ERRVAL_SUCCESS )
@@ -513,7 +512,7 @@ uint8_t CALIB_MeasureForCalibNegativeVal( double *pMeasuredVal )
  */
 uint8_t CALIB_CalibOnNegative( double dRefVal, double *pMeasuredVal, uint8_t bEarlyMeasurement )
 {
-	int idxScale = DMM_GetCurrentScale();
+	int idxScale = DMM_GetScale( 1 );
 
 	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxScale );
 	if( !bEarlyMeasurement )
@@ -670,7 +669,7 @@ uint8_t CALIB_CheckCompleteCalib( void )
 {
 	uint8_t fResult = 0;
 	uint8_t fCalibZ, fCalibP, fCalibN, fAC, fDC, fResistance, fDiode;
-	int idxScale = DMM_GetCurrentScale();
+	int idxScale = DMM_GetScale( 1 );
 
 	if( idxScale >= 0 && idxScale < DMM_CNTSCALES )
 	{

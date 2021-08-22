@@ -119,21 +119,18 @@ static const char *dmmranges[] = {
 };
 
 CALIB *curCal = NULL;
-DMMCFG const *curCfg = NULL;	// pointer to the current configuration
-int idxCurrentScale = -1;		// stores the current selected scale
-char fUseCalib = 1;				// controls if calibration coefficients should be applied in DMM_DGetStatus
+DMMCFG const *curCfg = NULL;					// pointer to the current configuration
+int idxCurrentScale[NUM_CHANNELS] = {-1,-1,-1};	// stores the current selected scale
+char fUseCalib = 1;								// controls if calibration coefficients should be applied in DMM_DGetStatus
 
+static uint32_t CTA_Initial;
 double dMeasuredVal[3];
-
-static DMMSTS curSts;
 
 void DMM_SendCmdSPI( uint8_t cs, uint8_t bCmd, int bytesNumber, uint8_t *pbWrData );
 void DMM_GetCmdSPI( uint8_t bCmd, int bytesNumber, uint8_t *pbRdData );
 
-// retrieve value from DMM
-double DMM_DGetStatus( uint8_t *pbErr );
-
-void DMM_StartFreqMeasure( void );
+static double DMM_DGetStatus( uint8_t channel, uint8_t *pbErr );	// retrieve value from DMM
+static void DMM_StartFreqMeasure( void );
 
 // errors
 uint8_t DMM_ERR_CheckIdxCalib( int idxScale );
@@ -313,12 +310,16 @@ void DMM_ConfigSwitches( uint8_t sw )
  **      It returns ERRVAL_DMM_CFGVERIFY if verifying fails.
  **      It returns ERRVAL_DMM_IDXCONFIG if the scale index is not valid.
  */
-uint8_t DMM_SetScale( int idxScale )
+uint8_t DMM_SetScale( uint8_t channel, int idxScale )
 {
+	DMMSTS curSts;
 	memset( &curSts, 0, sizeof(curSts) );
 
-	idxCurrentScale = -1;		// invalidate current scale
-	curCfg = NULL;				// invalidate pointer to the current configuration
+	if( --channel >= NUM_CHANNELS )
+		return ERRVAL_CMD_WRONGPARAMS;
+
+	idxCurrentScale[channel] = -1;		// invalidate current scale
+	curCfg = NULL;						// invalidate pointer to the current configuration
 	curCal = NULL;
 
 	// Verify index
@@ -335,12 +336,12 @@ uint8_t DMM_SetScale( int idxScale )
 	DMM_SendCmdSPI( CS_DMM, 0x20, 1, curSts.r );	// write R20 = 48h - SCMPI=010, ENCMP=1, ENCNTI,ENPCMPO,ENCTR=0
 
 	// Retrieve current Scale information (register setting, switch settings, calibration, etc.)
-	idxCurrentScale = idxScale;
+	idxCurrentScale[channel] = idxScale;
 	curCal = &calib.Dmm[ idxScale ];
 	curCfg = &dmmcfg[idxScale];
 	memcpy( curSts.r, curCfg->cfg, sizeof(curCfg->cfg) );			// set registers R20..R33
 	curSts.ctsta = 0x40;
-	curSts.cta[2] = ( DMM_GetCurrentMode() == DmmFrequency ) ? 0xF0 : 0xBF;
+	curSts.cta[2] = ( DMM_GetMode( idxScale ) == DmmFrequency ) ? 0xF0 : 0xBF;
 	/*
 	 * DIGILENT additionally sets the following registers (ONLY for 5VAC !!)
 	 * R34=02h - ??? Bit2 should be 0
@@ -355,10 +356,27 @@ uint8_t DMM_SetScale( int idxScale )
 	DMM_SendCmdSPI( CS_DMM, 0x00, sizeof(curSts), (uint8_t*)&curSts );
 
 	// start measure
-	if( idxCurrentScale == SCALE_FREQ )
+	if( DMM_GetMode( idxScale ) == DmmFrequency )
+	{
+		// GateTime = (0x1000000 - CTA) / FSysClk		[FSysClk = 4MHz / 4.9152MHz / 3.072MHz]
+		// => CTA = 0x1000000 - Tgate * FsysClk			[Tgate in s]
+#if 0
+		int16_t gatetime = 1000;						// ms
+		CTA_Initial = 0x1000000 - ( gatetime * (uint32_t)CRYSTAL ) / 1000;
+#else
+		CTA_Initial = 0x1000000 - (uint32_t)CRYSTAL;
+#endif
 		DMM_StartFreqMeasure();
+	}
 
 	return ERRVAL_SUCCESS;
+}
+
+int DMM_GetScale( uint8_t channel )
+{
+	if( --channel >= NUM_CHANNELS )
+		return -1;
+	return idxCurrentScale[channel];	// stores the current selected scale
 }
 
 /***	DMM_ERR_CheckIdxCalib
@@ -400,14 +418,14 @@ uint8_t DMM_ERR_CheckIdxCalib( int idxScale )
  **		When no error is detected, the error is set to ERRVAL_SUCCESS.
  **      The error is copied in the byte pointed by pbErr, if pbErr is not null.
  */
-double DMM_DGetValue( uint8_t *pbErr )
+static double DMM_DGetValue( uint8_t channel, uint8_t *pbErr )
 {
 	uint8_t bErr = ERRVAL_SUCCESS;
 	unsigned long cntTimeout = 0;				// valid data timeout counter
 	double dVal;
 
 	// wait until a valid value is retrieved or the timeout counter exceeds threshold
-	while( DMM_IsNotANumber( dVal = DMM_DGetStatus( &bErr ) ) &&
+	while( DMM_IsNotANumber( dVal = DMM_DGetStatus( channel, &bErr ) ) &&
 		( cntTimeout++ < DMM_VALIDDATA_CNTTIMEOUT ) &&
 		( bErr == ERRVAL_SUCCESS ) )
 		;
@@ -419,7 +437,7 @@ double DMM_DGetValue( uint8_t *pbErr )
 #if 0
 	// DIGILENT additionally treats the value in the 50VDC range with a cubic function...
 	// "compensate the not linear scale behavior"
-	if( bErr == ERRVAL_SUCCESS && DMM_GetCurrentScale() == DMMVoltageDC50Scale )
+	if( bErr == ERRVAL_SUCCESS && DMM_GetScale(0) == DMMVoltageDC50Scale )
 	{
 		dVal = dVal * dVal * dVal * DMM_Voltage50DCLinearCoeff_P3 + dVal * DMM_Voltage50DCLinearCoeff_P1 + dVal * DMM_Voltage50DCLinearCoeff_P0;	// does this make sense?
 	}
@@ -452,11 +470,11 @@ double DMM_DGetValue( uint8_t *pbErr )
  **      The error is copied on the byte pointed by pbErr, if pbErr is not null.
  **      When errors are detected, the function returns NAN.
  */
-double DMM_DGetAvgValue( int cbSamples, uint8_t *pbErr )
+double DMM_DGetAvgValue( uint8_t channel, int cbSamples, uint8_t *pbErr )
 {
 	uint8_t fValid = 1;
 	double dValAvg = 0.0, dVal;
-	int i, idxScale = DMM_GetCurrentScale();
+	int i, idxScale = DMM_GetScale( channel );
 
 	uint8_t bErr = DMM_ERR_CheckIdxCalib( idxScale );
 	if( bErr == ERRVAL_SUCCESS )
@@ -465,7 +483,7 @@ double DMM_DGetAvgValue( int cbSamples, uint8_t *pbErr )
 		{
 			for( i = 0; ( i < cbSamples ) && fValid; ++i )
 			{
-				dVal = DMM_DGetValue( &bErr );
+				dVal = DMM_DGetValue( channel, &bErr );
 				fValid = ( bErr == ERRVAL_SUCCESS ) && ( dVal != INFINITY ) && ( dVal != -INFINITY ) && !DMM_IsNotANumber( dVal );
 				if( fValid )
 					dValAvg += pow( dVal, 2 );
@@ -478,7 +496,7 @@ double DMM_DGetAvgValue( int cbSamples, uint8_t *pbErr )
 		}
 		else if( DMM_FCapacitanceScale( idxScale ) )
 		{
-			DMM_DGetValue( &bErr );
+			DMM_DGetValue( channel, &bErr );
 			if( bErr == ERRVAL_SUCCESS )
 				return 0.0;
 		}
@@ -486,7 +504,7 @@ double DMM_DGetAvgValue( int cbSamples, uint8_t *pbErr )
 		{
 			for( i = 0; ( i < cbSamples ) && fValid; ++i )
 			{
-				dVal = DMM_DGetValue( &bErr );
+				dVal = DMM_DGetValue( channel, &bErr );
 				fValid = ( bErr == ERRVAL_SUCCESS ) && ( dVal != INFINITY ) && ( dVal != -INFINITY ) && !DMM_IsNotANumber( dVal );
 				if( fValid )
 					dValAvg += dVal;
@@ -498,38 +516,6 @@ double DMM_DGetAvgValue( int cbSamples, uint8_t *pbErr )
 	if( bErr != ERRVAL_SUCCESS ) dValAvg = NAN;
 	if( pbErr ) *pbErr = bErr;
 	return dValAvg;
-}
-
-/***	DMM_GetCurrentScale
- **	Parameters:
- **      none
- **	Return Value:
- **		int     - current scale index
- **              - -1 if no current scale was selected
- **	Description:
- **		This function returns the current scale index.
- **      This is the last scale index selected using the DMM_SetScale function.
- **      In case no current scale was selected, the function returns -1.
- */
-int DMM_GetCurrentScale( void )
-{
-	return idxCurrentScale;
-}
-
-/***	DMM_GetCurrentMode
- **	Parameters:
- **      none
- **	Return Value:
- **		int     - current mode index
- **             - -1 if no current scale was selected
- **	Description:
- **		This function returns the current modee index.
- **     In case no current scale was selected, the function returns -1.
- */
-int DMM_GetCurrentMode( void )
-{
-	if( DMM_ERR_CheckIdxCalib( idxCurrentScale ) != ERRVAL_SUCCESS ) return -1;
-	return dmmcfg[idxCurrentScale].mode;
 }
 
 /***	DMM_GetMode
@@ -548,14 +534,14 @@ int DMM_GetMode( int idxScale )
 	return dmmcfg[idxScale].mode;
 }
 
-/***	DMM_GetCurrentScale
+/***	DMM_GetRange
  **	Parameters:
  **      none
  **	Return Value:
  **		int     - current scale index
- **              - -1 if no current scale was selected
+ **             - -1 if no current scale was selected
  **	Description:
- **		This function returns the current scale index.
+ **		This function returns the current range.
  **      This is the last scale index selected using the DMM_SetScale function.
  **      In case no current scale was selected, the function returns -1.
  */
@@ -563,12 +549,6 @@ double DMM_GetRange( int idxScale )
 {
 	if( DMM_ERR_CheckIdxCalib( idxScale ) != ERRVAL_SUCCESS ) return 0.0;
 	return dmmcfg[idxScale].range;
-}
-
-double DMM_GetCurrentRange( void )
-{
-	if( DMM_ERR_CheckIdxCalib( idxCurrentScale ) != ERRVAL_SUCCESS ) return 0.0;
-	return dmmcfg[idxCurrentScale].range;
 }
 
 /***	DMM_SetUseCalib
@@ -703,29 +683,6 @@ uint8_t DMM_FContinuityScale( int idxScale )
 	return ( mode == DmmContinuity );
 }
 
-/***	DMM_FDCCurrentScale
- **
- **	Parameters:
- **      < none>
- **
- **
- **	Return Value:
- **		1 if the current scale is a DC Current type scale.
- **		0 if the current scale is not a DC Current type scale.
- **
- **	Description:
- **		This function checks if the specified scale is a DC Current type scale.
- **      It returns 1 for the DC Current type scales, and 0 otherwise.
- **      The scale type is checked using the mode field in DMMCFG structure.
- **
- */
-uint8_t DMM_FDCCurrentScale()
-{
-	if( DMM_ERR_CheckIdxCalib( idxCurrentScale ) != ERRVAL_SUCCESS ) return 0;
-	int mode = curCfg->mode;
-	return ( mode == DmmDCCurrent );
-}
-
 /***	DMM_IsNotANumber
  **	Parameters:
  **      double dVal  - the value to be checked
@@ -759,8 +716,9 @@ uint8_t DMM_IsNotANumber( double dVal )
  **      The scale factor is the value that must multiply the value to convert from the base Unit to the prefixed unit (for example from V to mV)
  **      The function returns ERRVAL_DMM_IDXCONFIG if the provided Scale is not valid.
  */
-uint8_t DMM_GetScaleUnit( int idxScale, double *pdScaleFact, char *szUnitPrefix, char *szUnit, char *szRange )
+uint8_t DMM_GetScaleUnit( uint8_t channel, double *pdScaleFact, char *szUnitPrefix, char *szUnit, char *szRange )
 {
+	int idxScale = DMM_GetScale( 1 );			// always use scale of 1st channel!
 	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxScale );
 	if( bResult == ERRVAL_SUCCESS )				// valid idxScale
 	{
@@ -782,17 +740,29 @@ uint8_t DMM_GetScaleUnit( int idxScale, double *pdScaleFact, char *szUnitPrefix,
 		{
 			switch( cfg->mode )
 			{
-			case DmmDCVoltage:		strcpy( szUnit, "V DC" ); break;
-			case DmmACVoltage:		strcpy( szUnit, "V AC" ); break;
 			case DmmDiode:			strcpy( szUnit, "V" ); break;
-			case DmmDCCurrent:		strcpy( szUnit, "A DC" ); break;
-			case DmmACCurrent:		strcpy( szUnit, "A AC" ); break;
 			case DmmResistance:
 			case DmmResistance4W:
 			case DmmContinuity:		strcpy( szUnit, "Ohm" ); break;
 			case DmmTemperature:	strcpy( szUnit, "C" ); break;
 			case DmmCapacitance:	strcpy( szUnit, "F" ); break;
-			case DmmFrequency:		strcpy( szUnit, "Hz" ); break;
+			case DmmDCVoltage:		strcpy( szUnit, "V DC" ); break;
+			case DmmDCCurrent:		strcpy( szUnit, "A DC" ); break;
+
+			case DmmACVoltage:
+				if( channel == 1 )	strcpy( szUnit, "V DC" );
+				else				strcpy( szUnit, "Hz" );
+				break;
+
+			case DmmACCurrent:
+				if( channel == 1 )	strcpy( szUnit, "A AC" );
+				else				strcpy( szUnit, "Hz" );
+				break;
+
+			case DmmFrequency:
+				if( channel == 1 )	strcpy( szUnit, "Hz" );
+				else				strcpy( szUnit, "%%" );
+				break;
 			}
 		}
 
@@ -871,7 +841,7 @@ uint8_t DMM_FormatValue( double dVal, char *pString, uint8_t fUnit )
 	double dScaleFact;
 	char szUnitPrefix[ 2 ], szUnit[ 5 ], szRange[ 12 ];
 
-	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxCurrentScale );
+	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxCurrentScale[0] );
 	if( bResult == ERRVAL_SUCCESS )
 	{
 		if( ( dVal == INFINITY ) || ( dVal == -INFINITY ) )
@@ -884,7 +854,7 @@ uint8_t DMM_FormatValue( double dVal, char *pString, uint8_t fUnit )
 		}
 		else
 		{
-			bResult = DMM_GetScaleUnit( idxCurrentScale, &dScaleFact, szUnitPrefix, szUnit, szRange );
+			bResult = DMM_GetScaleUnit( idxCurrentScale[0], &dScaleFact, szUnitPrefix, szUnit, szRange );
 			if( bResult == ERRVAL_SUCCESS )			// valid idxScale
 			{
 				dVal *= dScaleFact;
@@ -903,15 +873,15 @@ uint8_t DMM_FormatValue( double dVal, char *pString, uint8_t fUnit )
 
 void DMM_StartFreqMeasure( void )
 {
-	uint8_t i;
+	uint8_t i, cta[3];
 
 	i = 0xC8;
 	DMM_SendCmdSPI( CS_DMM, 0x20, 1, &i );	// write R20=C8h - SCMPI=110, ENCMP=0, ENCNTI=1, ENPCMPO=0, ENCTR=0 (stop counters, reset CTA<7:0>)
 
-	curSts.cta[0] = 0x00;										// GateTime = (0x1000000 - CTA) / FSysClk		[FSysClk = 4.9152MHz]
-	curSts.cta[1] = 0x00;										// CTA = 0x1000000 - Tgate * FsysClk			[Tgate in s]
-	curSts.cta[2] = 0xB5;										// => 1s: 0xB50000
-	DMM_SendCmdSPI( CS_DMM, 0x1B, 3, (uint8_t*)&curSts.cta );	// write CTA
+	cta[0] =   CTA_Initial		   & 0xFF;
+	cta[1] = ( CTA_Initial >> 8 )  & 0xFF;
+	cta[2] = ( CTA_Initial >> 16 ) & 0xFF;
+	DMM_SendCmdSPI( CS_DMM, 0x1B, 3, cta );	// write CTA
 
 	i = 0xCA;
 	DMM_SendCmdSPI( CS_DMM, 0x20, 1, &i );	// write R20=CAh - SCMPI=110, ENCMP=0, ENCNTI=1, ENPCMPO=0, ENCTR=1 (start counting)
@@ -941,14 +911,21 @@ void DMM_StartFreqMeasure( void )
  **
  **
  */
-double DMM_DGetStatus( uint8_t *pbErr )
+static double DMM_DGetStatus( uint8_t channel, uint8_t *pbErr )
 {
+	DMMSTS curSts;
 	double v = NAN;
 	uint8_t i;
 	int64_t cnt;
 
+	if( --channel >= NUM_CHANNELS )
+	{
+		if( pbErr ) *pbErr = ERRVAL_CMD_WRONGPARAMS;
+		return NAN;
+	}
+
 	// Verify index
-	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxCurrentScale );
+	uint8_t bResult = DMM_ERR_CheckIdxCalib( idxCurrentScale[channel] );
 	if( bResult != ERRVAL_SUCCESS )
 	{
 		if( pbErr ) *pbErr = bResult;
@@ -956,7 +933,7 @@ double DMM_DGetStatus( uint8_t *pbErr )
 	}
 
 	// Compute values, according to the specific scale
-	if( DMM_FACScale( idxCurrentScale ) )					// AC uses RMS
+	if( DMM_FACScale( idxCurrentScale[channel] ) )					// AC uses RMS
 	{
 		int64_t vrms = 0;
 
@@ -978,8 +955,8 @@ double DMM_DGetStatus( uint8_t *pbErr )
 		else
 			v = curCfg->mul * sqrt( (double)vrms );
 	}
-	else if( idxCurrentScale >= SCALE_50_nF &&			// Read Mode I
-			 idxCurrentScale <= SCALE_500_uF )
+	else if( idxCurrentScale[channel] >= SCALE_50_nF &&			// Read Mode I
+			 idxCurrentScale[channel] <= SCALE_500_uF )
 	{
 		// read INTF register (0x1E) to check for new measurement
 		DMM_GetCmdSPI( 0x1E, 1, &i );
@@ -1032,8 +1009,8 @@ double DMM_DGetStatus( uint8_t *pbErr )
 		for( cnt = 0, i = 2; i < 3; --i ) cnt = ( cnt << 8 ) | curSts.ctc[i];
 		dMeasuredVal[2] = (double)cnt;
 	}
-	else if( idxCurrentScale >= SCALE_5_mF &&				// Read Mode II
-			 idxCurrentScale <= SCALE_50_mF )
+	else if( idxCurrentScale[channel] >= SCALE_5_mF &&				// Read Mode II
+			 idxCurrentScale[channel] <= SCALE_50_mF )
 	{
 		/*
 		63781624 HY3131: MOSI transfers: 54 00                       # Write R2a
@@ -1089,49 +1066,41 @@ double DMM_DGetStatus( uint8_t *pbErr )
 		{
 			v = curCfg->mul * vad1;
 
-			if( fUseCalib )					// apply calibration coefficients
+			if( fUseCalib )								// apply calibration coefficients
 				v = v * curCal->Mult + curCal->Add;
 		}
 		// ---
 	}
-	else if( idxCurrentScale == SCALE_FREQ )
+	else if( idxCurrentScale[channel] == SCALE_FREQ )
 	{
 		uint32_t val;
 
 		// read INTF register (0x1E) to check for new measurement
 		DMM_GetCmdSPI( 0x1E, 1, &i );
-		if( !( i & 0x01 ) )									// CTF=0 : conversion not yet ready
+		if( !( i & 0x01 ) )								// CTF=0 : conversion not yet ready
 		{
 			if( pbErr ) *pbErr = bResult;
 			return NAN;
 		}
 
-#if 0
-		DMM_GetCmdSPI( 0x1B, 3, dmmsts.cta );				// read CTA
-		DMM_GetCmdSPI( 0x18, 3, dmmsts.ctb );				// read CBA
-		DMM_GetCmdSPI( 0x15, 3, dmmsts.cta );				// read CTC
-		DMM_GetCmdSPI( 0x14, 1, &dmmsts.ctsta );			// read CTSTA
-#else
-		DMM_GetCmdSPI( 0x14, 10, &curSts.ctsta );			// read CTA, CTB, CTC and STA
-#endif
-		if( curSts.ctsta & 1 )								// CTBOV=1 : overflow
+		DMM_GetCmdSPI( 0x14, 10, &curSts.ctsta );		// read CTA, CTB, CTC and STA
+		if( curSts.ctsta & 1 )							// CTBOV=1 : overflow
 		{
 			if( pbErr ) *pbErr = bResult;
 			return NAN;
 		}
 
 		for( val = 0, i = 2; i < 3; --i ) val = ( val << 8 ) | curSts.cta[i];	// assemble CTA value
-		uint32_t T1 = 0x4B0000 + val;
-
+		uint32_t T1 = 0x1000000 - CTA_Initial + val;
 		if( T1 == 0 ) T1 = 1;
 
 		for( val = 0, i = 2; i < 3; --i ) val = ( val << 8 ) | curSts.ctb[i];	// assemble CTB value
-		v = (uint64_t)val * 4915200 / T1;
+		v = (uint64_t)val * (uint32_t)CRYSTAL / T1;		// frequency [Hz]
 
 		for( val = 0, i = 2; i < 3; --i ) val = ( val << 8 ) | curSts.ctc[i];	// assemble CTC value
-		dMeasuredVal[1] = (double)val / T1;				// duty cycle
+		dMeasuredVal[1] = 100.0 * val / T1;				// duty cycle [0..1]
 
-		DMM_StartFreqMeasure();
+		DMM_StartFreqMeasure();							// start next measure
 	}
 	else												// DC, RES, DIODE, CONT, TEMP use AD1
 	{
@@ -1183,14 +1152,26 @@ double DMM_DGetStatus( uint8_t *pbErr )
  **		This function implements the repeated session functionality for DMMMeasureRep and DMMMeasureRaw text commands of DMMCMD module.
  **		The function calls the DMM_DGetValue, eventually without calibration parameters being applied for DMMMeasureRaw.
  */
-uint8_t DMM_Measure( uint8_t fRaw, uint8_t fAvg )
+uint8_t DMM_Measure( uint8_t channel, uint8_t fRaw, uint8_t fAvg )
 {
 	uint8_t bErrCode = ERRVAL_SUCCESS;
-
+	int curScale = DMM_GetScale( channel );
+	if( curScale < 0 )
+		return ERRVAL_CMD_WRONGPARAMS;
+	uint8_t curMode = DMM_GetMode( curScale );
 	char fOldUseCalib = fUseCalib;
-	if( fRaw ) fUseCalib = 0;
 
-	dMeasuredVal[0] = fAvg > 1 ? DMM_DGetAvgValue( fAvg, &bErrCode ) : DMM_DGetValue( &bErrCode );
+	if( curMode == DmmFrequency )
+	{
+		fUseCalib = 0;
+		dMeasuredVal[channel-1] = DMM_DGetValue( channel, &bErrCode );
+	}
+	else
+	{
+		if( fRaw ) fUseCalib = 0;
+
+		dMeasuredVal[channel-1] = ( fAvg > 1 ) ? DMM_DGetAvgValue( channel, fAvg, &bErrCode ) : DMM_DGetValue( channel, &bErrCode );
+	}
 
 	fUseCalib = fOldUseCalib;
 

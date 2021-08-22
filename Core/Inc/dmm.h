@@ -154,42 +154,41 @@ typedef struct _PARTCALIBDATA{    //
     PARTCALIB  DmmPartCalib[DMM_CNTSCALES];    // stores the data needed to the calibration
 } PARTCALIBDATA;
 
-extern double dMeasuredVal[3];
+#define NUM_CHANNELS	3
+
+extern double dMeasuredVal[NUM_CHANNELS];
+
+uint8_t	DMM_SetScale( uint8_t ch, int idxScale );
+int		DMM_GetScale( uint8_t ch );
+
+int		DMM_GetMode( int idxScale );
+double	DMM_GetRange( int idxScale );
+uint8_t	DMM_GetScaleUnit( uint8_t channel, double *pdScaleFact, char *szUnitPrefix, char *szUnit, char *szRange );
+
+// value functions
+double	DMM_DGetAvgValue( uint8_t channel, int cbSamples, uint8_t *pbErr );
+uint8_t	DMM_Measure( uint8_t channel, uint8_t fRaw, uint8_t fAvg );
+
+uint8_t	DMM_FormatValue(double dVal, char *pString, uint8_t fUnit);
 
 uint8_t SPrintfDouble( char *pString, double dVal, uint8_t precision );
 
-void DMM_Init();
+void	DMM_SetUseCalib(uint8_t f);
+char	DMM_GetUseCalib();
 
-uint8_t DMM_SetScale(int idxScale);
-int DMM_GetCurrentScale( void );
-int DMM_GetCurrentMode( void );
-double DMM_GetCurrentRange( void );
-int DMM_GetMode( int idxScale );
-double DMM_GetRange( int idxScale );
-uint8_t DMM_GetScaleUnit( int idxScale, double *pdScaleFact, char *szUnitPrefix, char *szUnit, char *szRange );
+uint8_t	DMM_IsNotANumber( double dVal );
 
-uint8_t DMM_ERR_CheckIdxCalib( int idxScale );
-uint8_t DMM_IsNotANumber( double dVal );
+uint8_t	DMM_ERR_CheckIdxCalib( int idxScale );
+uint8_t	DMM_FDCScale( int idxScale );
+uint8_t	DMM_FACScale( int idxScale );
+uint8_t	DMM_FCapacitanceScale( int idxScale );
+uint8_t	DMM_FDCScale( int idxScale );
+uint8_t	DMM_FResistorScale( int idxScale );
+uint8_t	DMM_FCapacitanceScale( int idxScale );
+uint8_t	DMM_FDiodeScale( int idxScale );
+uint8_t	DMM_FContinuityScale( int idxScale );
 
-// value functions
-uint8_t DMM_Measure( uint8_t fRaw, uint8_t fAvg );
-
-double DMM_DGetValue(uint8_t *pbErr);
-double DMM_DGetAvgValue(int cbSamples, uint8_t *pbErr);
-uint8_t DMM_FormatValue(double dVal, char *pString, uint8_t fUnit);
-
-void DMM_SetUseCalib(uint8_t f);
-char DMM_GetUseCalib();
-
-uint8_t DMM_FDCCurrentScale();
-uint8_t DMM_FACScale( int idxScale );
-uint8_t DMM_FCapacitanceScale( int idxScale );
-uint8_t DMM_FDCScale( int idxScale );
-uint8_t DMM_FResistorScale( int idxScale );
-uint8_t DMM_FCapacitanceScale( int idxScale );
-uint8_t DMM_FDiodeScale( int idxScale );
-uint8_t DMM_FContinuityScale( int idxScale );
-uint8_t DMM_FDCCurrentScale();
+void	DMM_Init( void );
 
 #endif /* __DMMCFG_H */
 

@@ -24,6 +24,8 @@ DEBUG = 1
 # optimization
 OPT = -Og
 
+BOOTLOADER = 1
+CRYSTAL = 4915200
 
 #######################################
 # paths
@@ -152,16 +154,22 @@ ifeq ($(DEBUG), 1)
 CFLAGS += -g -gdwarf-2
 endif
 
+DEFINES = -DSTM32F103xB -DUSE_HAL_DRIVER -DBOOTLOADER=$(BOOTLOADER) -DCRYSTAL=$(CRYSTAL)
 
 # Generate dependency information
-CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)"
+CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" $(DEFINES)
 
 
 #######################################
 # LDFLAGS
 #######################################
 # link script
+ifeq ($(BOOTLOADER),1)
 LDSCRIPT = STM32F103CBTx_FLASH.ld
+else
+LDSCRIPT = STM32F103CBTx_FLASH_Standalone.ld
+endif
+
 
 # libraries
 LIBS = -lc -lm -lnosys -u _printf_float 
