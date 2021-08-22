@@ -1,5 +1,5 @@
 # Project Phoenix
-**Alternative firmware for the Voltcraft VC-7055BT ( = OWON XDM-2041 ) DMM**
+**Alternative firmware for the Voltcraft VC-7055BT = OWON XDM-2041 = PeakTech P 4094 DMMs**
 
 This project was born out of pure necessity, as my VC-7055BT did not work (stopping on the boot progress bar).  
 
