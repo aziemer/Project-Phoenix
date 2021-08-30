@@ -46,7 +46,10 @@ void TFT_setState( uint8_t on );
 void TFT_setBackGround( uint16_t color );
 void TFT_setForeGround( uint16_t color );
 void TFT_setFont( uint8_t no );
+void TFT_setFontSize( uint8_t size );
 uint8_t TFT_getFontHeight( void );
+size_t TFT_getStrWidth( char *txt );
+int TFT_printf( const char *fmt, ... );
 
 void TFT_setXPos( uint16_t x );
 void TFT_setYPos( uint16_t y );
@@ -58,14 +61,12 @@ void TFT_drawRect( int x1, int y1, int x2, int y2 );
 void TFT_fillRect( int x1, int y1, int x2, int y2 );
 void TFT_drawRoundRect( int x1, int y1, int x2, int y2 );
 void TFT_fillRoundRect( int x1, int y1, int x2, int y2 );
-
-//void TFT_drawButtonFrame( int x1, int y1, int x2, int y2 );
-
 void TFT_drawCircle( int x, int y, int radius );
 void TFT_fillCircle( int x, int y, int radius );
 
-size_t TFT_getStrWidth( char *txt );
-int TFT_printf( const char *fmt, ... );
+//void TFT_drawButtonFrame( int x1, int y1, int x2, int y2 );
+
+void TFT_clearScreen( uint16_t color );
 
 void TFT_Init( void );
 

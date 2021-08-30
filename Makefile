@@ -10,11 +10,21 @@
 #   2015-07-22 - first version
 # ------------------------------------------------
 
+# BOOTLOADER=0 : TFT initalization code is included, FLASH starts at 0x8000000.
+# BOOTLOADER=1 : No TFT initalization code included, FLASH starts at 0x8002000, 8k above the bootloader.
+BOOTLOADER = 1
+
+# The frequency of the crystal connected to the HY3131 (factory fitted is 4MHz, which is a bad choice for 50Hz countries)
+CRYSTAL = 4915200
+
+# WITH_CAL_DATA = 1 : Include calibration data located in the file "calibration_data.c", generated with the "extract_calibration" tool
+# WITH_CAL_DATA = 0 : Do not include data - assuming calibration data is present in the last 2k of FLASH at 0x801F800
+WITH_CAL_DATA = 0
+
 ######################################
 # target
 ######################################
 TARGET = VC-7055BT
-
 
 ######################################
 # building variables
@@ -23,9 +33,6 @@ TARGET = VC-7055BT
 DEBUG = 1
 # optimization
 OPT = -Og
-
-BOOTLOADER = 1
-CRYSTAL = 4915200
 
 #######################################
 # paths
@@ -39,13 +46,13 @@ BUILD_DIR = build
 # C sources
 C_SOURCES =  \
 Core/Src/main.c \
+Core/Src/application.c \
 Core/Src/gpio.c \
 Core/Src/rtc.c \
 Core/Src/tim.c \
 Core/Src/usart.c \
 Core/Src/tft.c \
 Core/Src/kbd.c \
-Core/Src/application.c \
 Core/Src/dmm.c \
 Core/Src/calib.c \
 Core/Src/scpi.c \
@@ -79,6 +86,10 @@ Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_core.c \
 Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ctlreq.c \
 Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ioreq.c \
 Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/usbd_cdc.c  
+
+ifeq ($(WITH_CAL_DATA),1)
+C_SOURCES += Core/Src/calibration_data.c
+endif
 
 # ASM sources
 ASM_SOURCES =  \
@@ -155,7 +166,15 @@ ifeq ($(DEBUG), 1)
 CFLAGS += -g -gdwarf-2
 endif
 
-DEFINES = -DSTM32F103xB -DUSE_HAL_DRIVER -DBOOTLOADER=$(BOOTLOADER) -DCRYSTAL=$(CRYSTAL)
+DEFINES = \
+	-DSTM32F103xB\
+	-DUSE_HAL_DRIVER\
+	-DBOOTLOADER=$(BOOTLOADER)\
+	-DCRYSTAL=$(CRYSTAL)
+
+BOOTLOADER = 1
+CRYSTAL = 4915200
+	
 
 # Generate dependency information
 CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" $(DEFINES)
@@ -179,6 +198,9 @@ LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BU
 
 # default action: build all
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
+	/Users/aziemer/Library/Arduino15/packages/stm32duino/tools/stm32tools/2021.5.31/macosx/maple_upload cu.usbserial-146310 2 1EAF:0003 $(BUILD_DIR)/$(TARGET).bin
+
+init: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
 	/Users/aziemer/Library/Arduino15/packages/stm32duino/tools/stm32tools/2021.5.31/macosx/maple_upload cu.usbserial-146310 2 1EAF:0003 $(BUILD_DIR)/$(TARGET).bin
 
 #######################################

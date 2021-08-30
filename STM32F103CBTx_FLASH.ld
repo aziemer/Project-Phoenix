@@ -56,13 +56,14 @@ ENTRY(Reset_Handler)
 _estack			= 0x20005000;	/* end of RAM */
 /* Generate a link error if heap and stack don't fit into RAM */
 _Min_Heap_Size	= 0x200;		/* required amount of heap  */
-_Min_Stack_Size	= 0x400;		/* required amount of stack */
+_Min_Stack_Size	= 0x800;		/* required amount of stack */
 
 /* Specify the memory areas */
 MEMORY
 {
 RAM (xrw)	: ORIGIN = 0x20000000, LENGTH = 20K
-FLASH (rx)	: ORIGIN = 0x08002000, LENGTH = 120K	/* reserve 8k for the bootloader */
+FLASH (rx)	: ORIGIN = 0x08002000, LENGTH = 118K	/* reserve first 8k for the bootloader */
+CALIB (r)	: ORIGIN = 0x0801F800, LENGTH = 2K
 }
 
 /* Define output sections */
@@ -129,6 +130,11 @@ SECTIONS
     KEEP (*(.fini_array*))
     PROVIDE_HIDDEN (__fini_array_end = .);
   } >FLASH
+
+  .calibrationSegment :
+  {
+    KEEP (*(.calibrationSegment))
+  } >CALIB
 
   /* used by the startup to initialize data */
   _sidata = LOADADDR(.data);

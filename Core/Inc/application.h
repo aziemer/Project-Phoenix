@@ -13,6 +13,14 @@
 #define PREC					8
 
 #define BACKGROUND_COLOR		RGB(0,0,0)
+#define WARNING_COLOR			RGB(99,33,33)
+
+#define ERROR_FONT				FONT_16X24
+#define ERROR_FONT_SIZE			2
+
+#define INDICATOR_ON_COLOR		RGB(0,99,0)
+#define INDICATOR_OFF_COLOR		RGB(33,33,33)
+#define INDICATOR_FONT			FONT_10X16
 
 #define HEADER_WIDTH			( TFT_WIDTH - 1 )
 #define HEADER_HEIGHT			29
@@ -52,14 +60,14 @@
 #define VALUE2_COLOR			RGB(99,66,0)
 
 #define UNIT2_FONT				FONT_10X16
-#define UNIT2_XPOS				(VALUE2_XPOS+60)
+#define UNIT2_XPOS				(VALUE2_XPOS+50)
 #define UNIT2_YPOS				VALUE2_YPOS
 #define UNIT2_COLOR				RGB(99,66,0)
 
 // 3rd measurement (AC V/I -> Freq, FREQ -> V)
 #define VALUE3_FONT				FONT_16X24
-#define VALUE3_XPOS				((TFT_WIDTH-20-BUTTON_XPOS)/2)
-#define VALUE3_YPOS				180
+#define VALUE3_XPOS				VALUE1_XPOS
+#define VALUE3_YPOS				220
 #define VALUE3_COLOR			RGB(99,66,0)
 
 #define UNIT3_FONT				FONT_10X16
@@ -71,21 +79,20 @@
 #define TIME_FONT				FONT_10X16
 #define TIME_COLOR				RGB(0,0,0)
 
-#define INDICATOR_ON_COLOR		RGB(0,99,0)
-#define INDICATOR_OFF_COLOR		RGB(33,33,33)
-
 #define HOLD_XPOS				10
 #define HOLD_YPOS				( HEADER_HEIGHT + 20 )
-#define HOLD_FONT				FONT_10X16
 
 #define AUTO_YPOS				( HEADER_HEIGHT + 20 )
-#define AUTO_FONT				FONT_10X16
 
-#define START_REPEAT			5
+#define START_REPEAT			50
+
+void DrawDot( uint16_t color );
 
 void SetHold( int mode );
 void SetAuto( int mode );
 void SetScale( uint8_t channel, int scale );
+
+void DrawFooter( char *msg, ... );
 
 void Application( void );
 

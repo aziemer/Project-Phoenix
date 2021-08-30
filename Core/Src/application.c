@@ -41,15 +41,18 @@ typedef struct {
 	BUTTON button[5];
 } MENU;
 
+static void SetFlag( uint8_t which, int state );
+static void RangeCalib( uint8_t which, int state );
+
 static MENU Menu[] = {
 	{
 		"Voltage",		1, 1,
 		{
 			{ "AC/DC",			NULL,		1,	SetScale,	1, SCALE_ALT },
 			{ "Long Text",		NULL,		1,	NULL,		0, 0 },
-			{ "Longer Text",	NULL,		1,	NULL,		0 },
-			{ "Variable",		"Value", 	1,	NULL,		0 },
-			{ NULL,				NULL,		0,	NULL,		0 }
+			{ "Longer Text",	NULL,		1,	NULL,		0, 0 },
+			{ "Variable",		"Value", 	1,	NULL,		0, 0 },
+			{ "Calib",			NULL,		1,	RangeCalib,	0, 0 }
 		}
 	},
 	{
@@ -59,7 +62,7 @@ static MENU Menu[] = {
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
-			{ NULL,				NULL,		0,	NULL,		0, 0 }
+			{ "Calib",			NULL,		1,	RangeCalib,	0, 0 }
 		}
 	},
 	{
@@ -69,7 +72,7 @@ static MENU Menu[] = {
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
-			{ NULL,				NULL,		0,	NULL,		0, 0 }
+			{ "Calib",			NULL,		1,	RangeCalib,	0, 0 }
 		}
 	},
 	{
@@ -89,7 +92,7 @@ static MENU Menu[] = {
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
 			{ NULL,				NULL,		0,	NULL,		0, 0 },
-			{ NULL,				NULL,		0,	NULL,		0, 0 }
+			{ "Calib",			NULL,		1,	RangeCalib,	0, 0 }
 		}
 	},
 	{
@@ -118,31 +121,29 @@ static MENU *curMenu = NULL;
 
 static uint8_t hold = 0;
 static uint8_t autorange = 1;
-static uint8_t dualmode = 1;
+static uint8_t dualmode = 0;
 
 #if 0
-static void DrawDot( uint16_t color )
+void DrawDot( uint16_t color )
 {
-	setColor( color );
-	fillCircle( TFT_WIDTH - HEADER_HEIGHT / 2, HEADER_HEIGHT / 2, HEADER_HEIGHT / 2 - 2 );
+	TFT_setForeGround( color );
+	TFT_fillCircle( TFT_WIDTH / 2, HEADER_HEIGHT / 2, HEADER_HEIGHT / 2 - 2 );
 }
 #endif
 
-static RTC_TimeTypeDef sTime;
-static RTC_DateTypeDef sDate;
-
-static void DrawTime( void )
+static void DrawTime( uint8_t force )
 {
+	const char *dayname[7] = { "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
+	RTC_DateTypeDef sDate;
+	RTC_TimeTypeDef sTime;
+	char tmp[30];
 	static uint8_t last_min = 0xFF;
 
-	HAL_RTC_GetTime( &hrtc, &sTime, RTC_FORMAT_BIN );	// MUST read both time and date, and in this order !
-	HAL_RTC_GetDate( &hrtc, &sDate, RTC_FORMAT_BIN );
-
-	if( last_min != sTime.Minutes )
+	HAL_RTC_GetTime( &hrtc, &sTime, RTC_FORMAT_BIN );
+	if( last_min != sTime.Minutes || force )
 	{
-		char tmp[20];
-
-		sprintf( tmp, "%02d.%02d. %02d:%02d", sDate.Date, sDate.Month, sTime.Hours, sTime.Minutes );
+		HAL_RTC_GetDate( &hrtc, &sDate, RTC_FORMAT_BIN );
+		sprintf( tmp, "  %s %02d.%02d.%04d %02d:%02d", dayname[sDate.WeekDay%7], sDate.Date, sDate.Month, sDate.Year + 2000, sTime.Hours, sTime.Minutes );
 
 		TFT_setFont( TIME_FONT );
 		TFT_setXPos( TFT_WIDTH - TFT_getStrWidth( tmp ) - 7 );
@@ -150,24 +151,10 @@ static void DrawTime( void )
 		TFT_setForeGround( TIME_COLOR );
 		TFT_setBackGround( HEADER_COLOR );
 		TFT_printf( tmp );
+
+		last_min = sTime.Minutes;
 	}
 }
-
-/*
-void InitTime()
-{
-	RTC_TimeTypeDef sTime1;
-	RTC_DateTypeDef sDate1;
-
-	sDate1.Date = 17;
-	sDate1.Month = 8;
-	sDate1.Year = 21;
-	sTime1.Hours = 23;
-	sTime1.Minutes = 40;
-	HAL_RTC_SetTime( &hrtc, &sTime1, RTC_FORMAT_BIN );
-	HAL_RTC_SetDate( &hrtc, &sDate1, RTC_FORMAT_BIN );
-}
-*/
 
 static void DrawHeader( void )
 {
@@ -183,7 +170,7 @@ static void DrawHeader( void )
 	TFT_printf( curMenu->legend );
 }
 
-static void DrawFooter( char *msg, ... )
+void DrawFooter( char *msg, ... )
 {
 	char txt[50];
 	uint32_t i;
@@ -229,14 +216,36 @@ static void DrawFooter( char *msg, ... )
 	}
 }
 
+static uint8_t format_value( char *str, double Val, double fullscale, uint8_t mode )
+{
+	if( mode == DmmFrequency )			snprintf( str, 10, "%8lu", (uint32_t)Val );
+	else if( DMM_isNAN( Val ) ||
+			 Val == +INFINITY || Val == -INFINITY ||
+			 abs( Val ) > 1.1 * fullscale )
+	{
+		strcpy( str, ( mode == DmmContinuity ) ? "OPEN" : "OVER" );
+		return ERRVAL_CMD_VALFORMAT;
+	}
+	else if( mode == DmmDiode && Val > DMM_DIODEOPENTHRESHOLD )
+	{
+		strcpy( str, "OPEN" );
+		return 1;
+	}
+	else if( mode == DmmCapacitance )	snprintf( str, PREC, "%1.5f", Val );
+	else if( mode == DmmDCVoltage ||
+			 mode == DmmDCCurrent ||
+			 mode == DmmTemperature )	snprintf( str, PREC, "%+1.4f", Val );
+	else								snprintf( str, PREC, "% 1.4f", Val );
+
+	return ERRVAL_SUCCESS;
+}
+
 static void DrawValue( void )
 {
 	uint8_t scale, mode, pbErr;
 	double dScaleFact, dFullScale, Val;
 	char szValue[PREC+10] = "";
 	char szUnitPrefix[10] = "";
-
-//	DrawDot( VGA_FUCHSIA );
 
 	if( hold ) return;
 
@@ -245,110 +254,113 @@ static void DrawValue( void )
 	pbErr = DMM_GetScaleUnit( 1, &dScaleFact, szUnitPrefix, NULL, NULL );
 	if( pbErr == ERRVAL_SUCCESS )
 	{
-		dFullScale = DMM_GetRange( scale );
-		Val = dMeasuredVal[0] * dScaleFact;
+		TFT_setFont( VALUE1_FONT );
+		TFT_setForeGround( VALUE1_COLOR );
+		TFT_setBackGround( BACKGROUND_COLOR );
+		TFT_setXPos( VALUE1_XPOS );
+		TFT_setYPos( VALUE1_YPOS );
 
-		if( Val > 1.1 * dFullScale )
-			strcpy( szValue, "+++++++" );
-		if( Val < -1.1 * dFullScale )
-			strcpy( szValue, "-------" );
-		else if( mode == DmmFrequency )
-			snprintf( szValue, 10, "%8.0f", dMeasuredVal[0] );
-		else if( mode == DmmCapacitance )
-			snprintf( szValue, PREC, "%1.5f", Val );
+		*szValue = 0;
+
+		if( mode == DmmCapacitance )
+		{
+			sprintf( szValue, "%08lu  ", (uint32_t)dRawVal[0] );
+		}
 		else
-			snprintf( szValue, PREC, "%+1.4f", Val );
+		{
+			dFullScale = DMM_GetRange( scale ) * dScaleFact;
+			Val = dMeasuredVal[0] * dScaleFact;
+
+			pbErr = format_value( szValue, Val, dFullScale, mode );
+			if( pbErr != ERRVAL_SUCCESS )	// OVER / OPEN
+			{
+				TFT_setForeGround( BACKGROUND_COLOR );
+				TFT_fillRect( VALUE1_XPOS, VALUE1_YPOS - 50, UNIT1_XPOS - 2, VALUE1_YPOS  );
+
+				TFT_setForeGround( VGA_RED );
+				TFT_setFont( ERROR_FONT );
+				TFT_setFontSize( ERROR_FONT_SIZE );
+				TFT_setXPos( VALUE1_XPOS + 75 );
+				TFT_setYPos( VALUE1_YPOS - 5 );
+			}
+		}
+		TFT_printf( szValue );
+		TFT_setFontSize( 1 );
 	}
-
-	if( pbErr != ERRVAL_SUCCESS )
-		sprintf( szValue, " ..... " );
-
-	szValue[PREC] = 0;		// just in case...
-
-	TFT_setFont( VALUE1_FONT );
-	TFT_setForeGround( VALUE1_COLOR );
-	TFT_setBackGround( BACKGROUND_COLOR );
-	TFT_setXPos( VALUE1_XPOS );
-	TFT_setYPos( VALUE1_YPOS );
-	TFT_printf( szValue );
 
 	if( dualmode )
 	{
-//		scale = DMM_GetScale( 0 );
-		pbErr = DMM_GetScaleUnit( 1, &dScaleFact, szUnitPrefix, NULL, NULL );
-		if( pbErr == ERRVAL_SUCCESS )
-		{
-			dFullScale = DMM_GetRange( scale );
-			Val = dMeasuredVal[1] * dScaleFact;
-
-			if( Val > 1.1 * dFullScale )
-				strcpy( szValue, "+++++++" );
-			if( Val < -1.1 * dFullScale )
-				strcpy( szValue, "-------" );
-			else if( mode == DmmCapacitance )
-				snprintf( szValue, PREC, " %1.4f", Val );
-			else if( mode == DmmFrequency )
-				snprintf( szValue, PREC, "%2.1f", dMeasuredVal[1] );
-			else
-				snprintf( szValue, PREC, "%+1.4f", Val );
-		}
-
-		if( pbErr != ERRVAL_SUCCESS )
-			sprintf( szValue, " ..... " );
-		szValue[PREC] = 0;		// just in case...
-
 		TFT_setFont( VALUE2_FONT );
 		TFT_setForeGround( VALUE2_COLOR );
 		TFT_setBackGround( BACKGROUND_COLOR );
-		TFT_setXPos( VALUE2_XPOS );
-		TFT_setYPos( VALUE2_YPOS );
+
+		if( mode == DmmCapacitance )
+		{
+			sprintf( szValue, "%08lu  ", (uint32_t)dRawVal[1] );
+			TFT_setXPos( VALUE1_XPOS );
+			TFT_setYPos( VALUE2_YPOS );
+		}
+		else
+		{
+			pbErr = DMM_GetScaleUnit( 1, &dScaleFact, szUnitPrefix, NULL, NULL );
+			if( pbErr == ERRVAL_SUCCESS )
+			{
+				dFullScale = DMM_GetRange( scale ) * dScaleFact;
+				Val = dMeasuredVal[1] * dScaleFact;
+				pbErr = format_value( szValue, Val, dFullScale, mode );
+			}
+			else
+				sprintf( szValue, " ..... " );
+
+			TFT_setXPos( VALUE2_XPOS );
+			TFT_setYPos( VALUE2_YPOS );
+		}
+
 		TFT_printf( szValue );
 	}
 
 	if( dualmode == 2 )
 	{
-//		scale = DMM_GetScale( 3 );
-		pbErr = DMM_GetScaleUnit( 1, &dScaleFact, szUnitPrefix, NULL, NULL );
-		if( pbErr == ERRVAL_SUCCESS )
-		{
-			dFullScale = DMM_GetRange( scale );
-			Val = dMeasuredVal[1] * dScaleFact;
-
-			if( Val > 1.1 * dFullScale )
-				strcpy( szValue, "+++++++" );
-			if( Val < -1.1 * dFullScale )
-				strcpy( szValue, "-------" );
-			else if( mode == DmmCapacitance || mode == DmmFrequency )
-				snprintf( szValue, PREC, "%1.5f", Val );
-			else
-				snprintf( szValue, PREC, "%+1.4f", Val );
-		}
-
-		if( pbErr != ERRVAL_SUCCESS )
-			sprintf( szValue, " ..... " );
-		szValue[PREC] = 0;		// just in case...
-
 		TFT_setFont( VALUE3_FONT );
 		TFT_setForeGround( VALUE3_COLOR );
 		TFT_setBackGround( BACKGROUND_COLOR );
-		TFT_setXPos( VALUE3_XPOS );
-		TFT_setYPos( VALUE3_YPOS );
+
+		if( mode == DmmCapacitance )
+		{
+			sprintf( szValue, "%08lu  ", (uint32_t)dRawVal[2] );
+			TFT_setXPos( VALUE1_XPOS );
+			TFT_setYPos( VALUE2_YPOS + 30 );
+		}
+		else
+		{
+			pbErr = DMM_GetScaleUnit( 1, &dScaleFact, szUnitPrefix, NULL, NULL );
+			if( pbErr == ERRVAL_SUCCESS )
+			{
+				dFullScale = DMM_GetRange( scale ) * dScaleFact;
+				Val = dMeasuredVal[2] * dScaleFact;
+				pbErr = format_value( szValue, Val, dFullScale, mode );
+			}
+			else
+				sprintf( szValue, " ..... " );
+
+			TFT_setXPos( VALUE3_XPOS );
+			TFT_setYPos( VALUE3_YPOS );
+		}
+
 		TFT_printf( szValue );
 	}
-
-//	DrawDot( VGA_LIME );
 }
 
 void SetHold( int mode )
 {
 	switch( mode )
 	{
-	case 0:		hold = 0; break;
 	case 1:		hold = 1; break;
+	case 0:		hold = 0; break;
 	default:	hold = !hold; break;
 	}
 
-	TFT_setFont( HOLD_FONT );
+	TFT_setFont( INDICATOR_FONT );
 	TFT_setForeGround( hold ? INDICATOR_ON_COLOR : INDICATOR_OFF_COLOR );
 	TFT_setBackGround( BACKGROUND_COLOR );
 	TFT_setXPos( HOLD_XPOS );
@@ -360,17 +372,36 @@ void SetAuto( int mode )
 {
 	switch( mode )
 	{
-	case 0:		autorange = 0; break;
 	case 1:		autorange = 1; break;
+	case 0:		autorange = 0; break;
 	default:	autorange = !autorange; break;
 	}
 
-	TFT_setFont( AUTO_FONT );
-	TFT_setForeGround( autorange ? INDICATOR_ON_COLOR : INDICATOR_OFF_COLOR );
+	TFT_setFont( INDICATOR_FONT );
+	TFT_setForeGround( autorange ? INDICATOR_ON_COLOR : BACKGROUND_COLOR );
 	TFT_setBackGround( BACKGROUND_COLOR );
 	TFT_setXPos( BUTTON_XPOS - TFT_getStrWidth( "HOLD" ) - 10 );
 	TFT_setYPos( AUTO_YPOS );
 	TFT_printf( "AUTO" );
+}
+
+void SetCalib( uint8_t channel, int mode )
+{
+	switch( mode )
+	{
+	case 1:		DMM_SetUseCalib( channel, 1 ); break;
+	case 0:		DMM_SetUseCalib( channel, 0 ); break;
+	default:	DMM_SetUseCalib( channel, ! DMM_GetUseCalib( channel ) ); break;
+	}
+
+	if( !DMM_GetUseCalib( channel ) ) dualmode = 2;
+
+	TFT_setFont( INDICATOR_FONT );
+	TFT_setForeGround( DMM_GetUseCalib( channel ) ? BACKGROUND_COLOR : WARNING_COLOR );
+	TFT_setBackGround( BACKGROUND_COLOR );
+	TFT_setXPos( BUTTON_XPOS - TFT_getStrWidth( "UNCAL" ) - 10 );
+	TFT_setYPos( AUTO_YPOS + 20 );
+	TFT_printf( "UNCAL" );
 }
 
 static void DoMenu( int no )	// no=0: (re)load current menu
@@ -468,7 +499,10 @@ DUAL_LINE:
 
 	DrawHeader();
 	DrawFooter( NULL );
-	SetAuto( -1 );
+	DrawTime( 1 );
+
+	SetAuto( autorange );					// redraw AUTO message
+	SetCalib( 1, DMM_GetUseCalib( 1 ) );	// redraw UNCAL message
 }
 
 static void MenuFunction( uint8_t no )		// soft buttons to the right of the display
@@ -478,24 +512,6 @@ static void MenuFunction( uint8_t no )		// soft buttons to the right of the disp
 		curMenu->button[no].callback( curMenu->button[no].cbChannel, curMenu->button[no].cbValue );
 
 	DoMenu( 0 );		// redraw current menu with possibly changed parameters
-}
-
-static int findScale( uint8_t mode, double fsr )	// AC<->DC, 2W<->4W
-{
-	uint8_t idxScale;
-
-	if( mode < 0 )		// oops
-		return -1;
-
-	for( idxScale = 0; idxScale < DMM_CNTSCALES; ++idxScale )
-	{
-		if( DMM_GetMode( idxScale ) == mode &&
-			DMM_GetRange( idxScale ) == fsr )
-		{
-			return idxScale;
-		}
-	}
-	return -1;
 }
 
 void SetScale( uint8_t channel, int scale )
@@ -540,17 +556,17 @@ void SetScale( uint8_t channel, int scale )
 		case DmmDiode:			scale = SCALE_500_Ohm; break;
 
 		case DmmDCVoltage:
-			scale = findScale( DmmACVoltage, fsr );
+			scale = DMM_FindScale( DmmACVoltage, fsr );
 			break;
 		case DmmACVoltage:
-			scale = findScale( DmmDCVoltage, fsr );
+			scale = DMM_FindScale( DmmDCVoltage, fsr );
 			break;
 
 		case DmmDCCurrent:
-			scale = findScale( DmmACCurrent, fsr );
+			scale = DMM_FindScale( DmmACCurrent, fsr );
 			break;
 		case DmmACCurrent:
-			scale = findScale( DmmDCCurrent, fsr );
+			scale = DMM_FindScale( DmmDCCurrent, fsr );
 			break;
 
 		case DmmCapacitance:
@@ -565,7 +581,7 @@ void SetScale( uint8_t channel, int scale )
 		break;
 	}
 
-	if( DMM_ERR_CheckIdxCalib( scale ) != ERRVAL_SUCCESS )
+	if( DMM_isScale( scale ) != ERRVAL_SUCCESS )
 		err = ERRVAL_CMD_WRONGPARAMS;
 
 	if( err == ERRVAL_SUCCESS && scale != curScale )
@@ -580,9 +596,7 @@ void SetScale( uint8_t channel, int scale )
 		{
 			uint16_t xpos = UNIT1_XPOS;
 			curMode = DMM_GetMode( scale );
-			if( curMode == DmmCapacitance )		// debug counter values
-				dualmode = 2;
-			else if( curMode == DmmFrequency )	// debug counter values
+			if( curMode == DmmFrequency )	// debug counter values
 			{
 				dualmode = 1;
 				xpos += 40;
@@ -638,6 +652,8 @@ void SetScale( uint8_t channel, int scale )
 				TFT_setForeGround( BACKGROUND_COLOR );
 				TFT_fillRect( TFT_getXPos(), TFT_getYPos() - TFT_getFontHeight(), BUTTON_XPOS - 10, TFT_getYPos() + 10 );	// must be TOP/LEFT -> BOTTOM/RIGHT
 			}
+
+			DMM_Trigger( channel );
 		}
 	}
 
@@ -654,7 +670,7 @@ void SetScale( uint8_t channel, int scale )
 		case DmmResistance4W:	menu = 3; break;
 		case DmmContinuity:		menu = 4; break;
 		case DmmDiode:			menu = 5; break;
-		case DmmCapacitance:	menu = 6; break;
+		case DmmCapacitance:	menu = 6; dualmode = 2; break;
 		case DmmFrequency:		menu = 7; break;
 
 		case DmmTemperature:
@@ -665,12 +681,136 @@ void SetScale( uint8_t channel, int scale )
 	DoMenu( menu );
 }
 
+static void SetFlag( uint8_t which, int state )
+{
+	switch( which )
+	{
+	case 1:	SetCalib( 1, state ); break;
+	case 2:	SetHold( state ); break;
+	case 3:	SetAuto( state ); break;
+	}
+}
+
+static void RangeCalib( uint8_t which, int state )
+{
+	uint8_t key;
+	int idxScale = DMM_GetScale( 1 );
+	if( DMM_isScale( idxScale ) != ERRVAL_SUCCESS )
+		return;
+
+	for( state = 0; state < 3; ++state )
+	{
+		while( KBD_Read() )					// wait until released
+			;
+
+		TFT_setForeGround( VGA_BLACK );
+		TFT_setBackGround( VGA_BLACK );
+		TFT_fillRect( 0, HEADER_HEIGHT + 1, BUTTON_XPOS - 2, BUTTON_YPOS(4) - 1);
+
+		TFT_setFont( FONT_10X16 );
+		TFT_setForeGround( VGA_WHITE );
+		TFT_setXPos( 5 );
+		TFT_setYPos( HEADER_HEIGHT + 20 );
+		switch( state )
+		{
+		case 0:
+			if(		 DMM_isFRES(idxScale) )	TFT_printf( "4W short inputs" );
+			else if( DMM_isCURR(idxScale) )	TFT_printf( "Remove all input signals" );
+			else							TFT_printf( "Short HI & LO inputs" );
+			break;
+
+		case 1:
+			if(		 DMM_isFRES(idxScale) )	TFT_printf( "Apply resistance %s", dmmranges[idxScale] );
+			else if( DMM_isCURR(idxScale) )	TFT_printf( "Apply %s to I & LO inputs", dmmranges[idxScale] );
+			else if( DMM_isDIOD(idxScale) )	TFT_printf( "Apply 3.0V to HI & LO inputs" );
+			else							TFT_printf( "Apply %s to HI & LO inputs", dmmranges[idxScale] );
+			break;
+
+		case 2:
+			if(		 DMM_isCURR(idxScale) )	TFT_printf( "Apply -%s to I & LO inputs", dmmranges[idxScale] );
+			else							TFT_printf( "Apply -%s to HI & LO inputs", dmmranges[idxScale] );
+			break;
+		}
+
+		TFT_setXPos( 5 );
+		TFT_setYPos( HEADER_HEIGHT + 40 );
+		TFT_printf( "Press RANGE to start, DUAL EXIT to abort" );
+
+		while( ( key = KBD_Read() ) == 0 )
+			;
+		if( key == KEY_EXIT )
+			break;
+
+		uint8_t bResult = 0;
+		switch( state )
+		{
+		case 0:	bResult = CALIB_CalibOnZero( NULL ); break;
+		case 1: bResult = CALIB_CalibOnPositive( dmmcfg[idxScale].range, NULL ); break;
+		case 2: bResult = CALIB_CalibOnNegative( 0.0 - dmmcfg[idxScale].range, NULL ); break;
+		}
+
+		if( bResult != ERRVAL_SUCCESS )
+		{
+			TFT_setForeGround( VGA_BLACK );
+			TFT_setBackGround( VGA_BLACK );
+			TFT_fillRect( 0, HEADER_HEIGHT + 1, BUTTON_XPOS - 2, BUTTON_YPOS(4) - 1);
+
+			TFT_setForeGround( VGA_RED );
+			TFT_setXPos( 5 );
+			TFT_setYPos( HEADER_HEIGHT + 20 );
+			TFT_printf( "FAILED !" );
+
+			TFT_setXPos( 5 );
+			TFT_setYPos( HEADER_HEIGHT + 80 );
+			TFT_printf( "DONE - press any key" );
+
+			while( !KBD_Read() )		// wait until pressed
+				;
+			while( KBD_Read() )			// wait until released
+				;
+
+			break;
+		}
+
+		if( state == 2 || ( state == 1 && ( DMM_isFRES(idxScale) || DMM_isDIOD(idxScale) ) ) )
+		{
+			TFT_setForeGround( VGA_BLACK );
+			TFT_setBackGround( VGA_BLACK );
+			TFT_fillRect( 0, HEADER_HEIGHT + 1, BUTTON_XPOS - 2, BUTTON_YPOS(4) - 1);
+
+			TFT_setForeGround( VGA_WHITE );
+			TFT_setXPos( 5 );
+			TFT_setYPos( HEADER_HEIGHT + 20 );
+			TFT_printf( "MULT = %1.5f", calib[idxScale].Mult );
+
+			TFT_setXPos( 5 );
+			TFT_setYPos( HEADER_HEIGHT + 40 );
+			TFT_printf( "ADD  = %1.5f", calib[idxScale].Add );
+
+			TFT_setXPos( 5 );
+			TFT_setYPos( HEADER_HEIGHT + 80 );
+			TFT_printf( "DONE - press any key" );
+
+			while( !KBD_Read() )		// wait until pressed
+				;
+			while( KBD_Read() )			// wait until released
+				;
+
+			break;
+		}
+	}
+
+	TFT_setForeGround( VGA_BLACK );
+	TFT_setBackGround( VGA_BLACK );
+	TFT_fillRect( 0, HEADER_HEIGHT + 1, BUTTON_XPOS - 2, BUTTON_YPOS(4) - 1);
+	DoMenu( 0 );
+}
+
+
 void Application( void )
 {
 	uint8_t key, last_key = 0;
 	uint16_t repeat_timeout = 0;
-
-//	InitTime();
 
 	KBD_Init();
 
@@ -679,6 +819,9 @@ void Application( void )
 	TFT_setForeGround( BACKGROUND_COLOR );
 	TFT_fillRect( 0, 0, TFT_WIDTH-1, TFT_HEIGHT-1 );		// Clear screen
 
+	DMM_SetAveraging( 1, 1 );
+	DMM_SetUseCalib( 1, 1 );
+
 	SetScale( 1, SCALE_DC_1kV );
 	SetAuto( 1 );
 
@@ -686,10 +829,20 @@ void Application( void )
 	{
 		Do_SCPI();
 
-		DrawTime();
+		DrawTime( 0 );
 
-		if( DMM_Measure( 1, 0, 1 ) == ERRVAL_SUCCESS )		// channel1, scaled value, averaging = 1 (no)
+		switch( DMM_Measure( 1 ) )
+		{
+		case ERRVAL_SUCCESS:
+//			DrawDot( VGA_LIME );
 			DrawValue();
+			// no break
+		case ERRVAL_CMD_NO_TRIGGER:
+//		case ERRVAL_CALIB_NANDOUBLE:
+//			DrawDot( VGA_FUCHSIA );
+			DMM_Trigger( 1 );
+			break;
+		}
 
 		key = KBD_Read();
 
@@ -712,6 +865,7 @@ void Application( void )
 			case KEY_AMP:	SetScale( 1, ( curMode == DmmDCCurrent || curMode == DmmACCurrent ) ? SCALE_ALT : SCALE_DC_500mA ); break;
 			case KEY_OHM:	SetScale( 1, ( curMode == DmmResistance || curMode == DmmResistance4W || curMode == DmmDiode || curMode == DmmContinuity ) ? SCALE_ALT : SCALE_500_Ohm ); break;
 			case KEY_FREQ:	SetScale( 1, SCALE_FREQ ); break;
+			case KEY_CAP:	SetScale( 1, SCALE_50_nF ); break;
 
 			// soft keys right
 			case KEY_F1:	MenuFunction( 1 ); break;
@@ -727,9 +881,9 @@ void Application( void )
 			case KEY_UP:	SetScale( 1, SCALE_UP ); break;
 			case KEY_DOWN:	SetScale( 1, SCALE_DOWN ); break;
 
+
 			default:		break;
 #if 0
-			case KEY_CAP:	SetScale( 1, SCALE_50_nF ); break;
 			case KEY_TEMP:	SetScale( 1, SCALE_TEMP ); break;
 			case KEY_LEFT:	break;
 			case KEY_RIGHT:	break;
@@ -739,7 +893,6 @@ void Application( void )
 			case KEY_SAVE:	break;
 			case KEY_REC:	break;
 			case KEY_PORT:	break;
-			case KEY_UTIL:	break;
 #endif
 			}
 		}

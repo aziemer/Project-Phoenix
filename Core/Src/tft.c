@@ -139,9 +139,9 @@ static uint16_t tft_bgcolor = RGB(0,0,0);
 static uint16_t tft_fgcolor = RGB(100,100,100);
 static uint16_t tft_xpos = 0;
 static uint16_t tft_ypos = 0;
-static int8_t tft_font_topy;			// tallest character above base-line (negative Y!)
-static int8_t tft_font_bottomy = 0;		// tallest under-cut below base-line (positive Y!)
-static uint16_t tft_fontsize = 1;
+static int16_t tft_font_topy;			// tallest character above base-line (negative Y!)
+static int16_t tft_font_bottomy = 0;	// tallest under-cut below base-line (positive Y!)
+static int16_t tft_fontsize = 1;
 
 static const GFXfont *gfxFont = NULL;
 
@@ -361,6 +361,12 @@ void TFT_fillRect( int x1, int y1, int x2, int y2 )
 	endWrite();
 }
 
+void TFT_clearScreen( uint16_t color )
+{
+	TFT_setForeGround( color );
+	TFT_fillRect( 0, 0, TFT_WIDTH-1, TFT_HEIGHT-1 );
+}
+
 void TFT_drawRoundRect( int x1, int y1, int x2, int y2 )
 {
 	if( ( x2 - x1 ) > 4 && ( y2 - y1 ) > 4 )
@@ -527,7 +533,7 @@ int TFT_printf( const char *fmt, ... )
 {
 	const uint8_t *bitmap = gfxFont->bitmap;
 	int8_t xx, yy, x1, x2, ys, ye, xs, xe;
-	uint8_t xAdvance, blksize = tft_fontsize * tft_fontsize, count, lines;
+	uint8_t xAdvance, count, lines;
 	uint8_t bits = 0, start_bits;
 	uint8_t bit = 0, start_bit;
 	uint16_t bo, start_bo, color;
@@ -585,7 +591,7 @@ int TFT_printf( const char *fmt, ... )
 
 			startWrite();
 
-			setXY(	tft_xpos + x1, tft_ypos + tft_fontsize * tft_font_topy,
+			setXY(	tft_xpos + tft_fontsize * x1,     tft_ypos + tft_fontsize * tft_font_topy,
 					tft_xpos + tft_fontsize * x2 - 1, tft_ypos + tft_fontsize * tft_font_bottomy - 1 );
 
 			HAL_GPIO_WritePin( LCD_RS_GPIO_Port, LCD_RS_Pin, GPIO_PIN_RESET );	// low
@@ -600,11 +606,11 @@ int TFT_printf( const char *fmt, ... )
 
 				for( lines = 0; lines < tft_fontsize; ++lines )		// repeat each line 'tft_fontsize' times
 				{
+					bo = start_bo;
 					bit = start_bit;
 					bits = start_bits;
-					bo = start_bo;
 
-					for( xx = x1; xx < x2; ++xx )					// output 'tft_fontsize' pixels per dot
+					for( xx = x1; xx < x2; ++xx )
 					{
 						color = tft_bgcolor;
 
@@ -615,7 +621,7 @@ int TFT_printf( const char *fmt, ... )
 							bits <<= 1;
 						}
 
-						for( count = blksize; count; --count )
+						for( count = tft_fontsize; count; --count )	// output 'tft_fontsize' pixels per dot
 						{
 							transfer( color >> 8 );
 							transfer( color & 0xFF );
