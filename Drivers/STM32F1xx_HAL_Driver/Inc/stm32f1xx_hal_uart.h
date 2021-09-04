@@ -71,7 +71,7 @@ typedef struct
                                            This parameter can be a value of @ref UART_Hardware_Flow_Control */
 
   uint32_t OverSampling;              /*!< Specifies whether the Over sampling 8 is enabled or disabled, to achieve higher speed (up to fPCLK/8).
-                                           This parameter can be a value of @ref UART_Over_Sampling. This feature is only available 
+                                           This parameter can be a value of @ref UART_Over_Sampling. This feature is only available
                                            on STM32F100xx family, so OverSampling parameter should always be set to 16. */
 } UART_InitTypeDef;
 
@@ -167,10 +167,11 @@ typedef struct __UART_HandleTypeDef
 
   __IO HAL_UART_RxTypeTypeDef ReceptionType;      /*!< Type of ongoing reception          */
 
+#ifdef HAL_DMA_MODULE_ENABLED
   DMA_HandleTypeDef             *hdmatx;          /*!< UART Tx DMA Handle parameters      */
 
   DMA_HandleTypeDef             *hdmarx;          /*!< UART Rx DMA Handle parameters      */
-
+#endif
   HAL_LockTypeDef               Lock;             /*!< Locking object                     */
 
   __IO HAL_UART_StateTypeDef    gState;           /*!< UART state information related to global Handle management

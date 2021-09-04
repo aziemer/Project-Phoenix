@@ -49,18 +49,18 @@
 #define VALUE1_COLOR			RGB(99,66,0)
 
 #define UNIT1_FONT				FONT_16X24
-#define UNIT1_XPOS				(VALUE1_XPOS+250)
+#define UNIT1_XPOS				(VALUE1_XPOS+275)
 #define UNIT1_YPOS				(VALUE1_YPOS-2)
 #define UNIT1_COLOR				RGB(99,66,0)
 
-// 2nd measurement (ACV/ACA/FREQ -> Duty)
+// 2nd measurement (FREQ -> Duty, ACV/I -> Freq)
 #define VALUE2_FONT				FONT_16X24
 #define VALUE2_XPOS				VALUE1_XPOS
 #define VALUE2_YPOS				190
 #define VALUE2_COLOR			RGB(99,66,0)
 
 #define UNIT2_FONT				FONT_10X16
-#define UNIT2_XPOS				(VALUE2_XPOS+50)
+#define UNIT2_XPOS				(VALUE2_XPOS+75)
 #define UNIT2_YPOS				VALUE2_YPOS
 #define UNIT2_COLOR				RGB(99,66,0)
 
@@ -71,7 +71,7 @@
 #define VALUE3_COLOR			RGB(99,66,0)
 
 #define UNIT3_FONT				FONT_10X16
-#define UNIT3_XPOS				(VALUE3_XPOS+50)
+#define UNIT3_XPOS				(VALUE3_XPOS+75)
 #define UNIT3_YPOS				VALUE3_YPOS
 #define UNIT3_COLOR				RGB(99,66,0)
 

@@ -137,32 +137,6 @@ typedef struct CALIBRATION_AREA {
 	// other stuff follows
 } __attribute__((__packed__)) CAL_DATA;
 
-/***	CALIB_ReplaceCalibNullValues()
- **
- **	Parameters:
- **      none
- **
- **	Return Value:
- **		none
- **
- **	Description:
- **		This function checks all the calibration data and replaces the forbidden values (not a number) with neutral value 0.
- **      It is abnormal to have forbidden values, still this situation theoretically might occur.
- **
- */
-static void CALIB_ReplaceCalibNullValues()
-{
-	int idxScale;
-	for( idxScale = 0; idxScale < DMM_CNTSCALES; idxScale++ )
-	{
-		if( *(uint32_t*)&calib[ idxScale ].Mult == 0 || DMM_isNAN( calib[ idxScale ].Mult ) )
-			calib[ idxScale ].Mult = 1.0; // use 1 if no calibration data is available (abnormal situation)
-
-		if( DMM_isNAN( calib[ idxScale ].Add ) )
-			calib[ idxScale ].Add = 0.0; // use 0 if no calibration data is available (abnormal situation)
-	}
-}
-
 /***	CALIB_InitPartCalibData()
  **
  **	Parameters:
@@ -214,7 +188,7 @@ static void CALIB_InitPartCalibData( void )
  */
 static uint8_t CALIB_ReadAllCalibsFromFLASH( void )
 {
-	uint8_t bResult = ERRVAL_SUCCESS;
+	uint8_t idxScale, bResult = ERRVAL_SUCCESS;
 
 	// TODO
 #if 0
@@ -222,6 +196,7 @@ static uint8_t CALIB_ReadAllCalibsFromFLASH( void )
 	if( caldata->HW_Model == 0xFF )			// missing calibration data !
 	{
 		HAL_FLASH_Unlock();
+
 		size_t i;
 		for( i = 0; i < sizeof(cal_defaults); i += 4 )
 		{
@@ -229,13 +204,26 @@ static uint8_t CALIB_ReadAllCalibsFromFLASH( void )
 			Data = ((uint32_t*)cal_defaults)[i];
 			HAL_FLASH_Program( FLASH_TYPEPROGRAM_WORD, Address, Data );		// program 32-Bit word
 		}
+
 		HAL_FLASH_Lock();
 	}
+
 #else
-	memset( &calib, 0, sizeof(calib) );
+	for( idxScale = 0; idxScale < DMM_CNTSCALES; ++idxScale )
+	{
+		calib[ idxScale ].Mult = 1.0;
+		calib[ idxScale ].Add = 0.0;
+	}
 #endif
 
-	CALIB_ReplaceCalibNullValues();
+	for( idxScale = 0; idxScale < DMM_CNTSCALES; ++idxScale )
+	{
+		if( *(uint32_t*)&calib[ idxScale ].Mult == 0 || DMM_isNAN( calib[ idxScale ].Mult ) )
+			calib[ idxScale ].Mult = 1.0;	// use 1 if no calibration data is available (abnormal situation)
+
+		if( DMM_isNAN( calib[ idxScale ].Add ) )
+			calib[ idxScale ].Add = 0.0;	// use 0 if no calibration data is available (abnormal situation)
+	}
 	return bResult;
 }
 
@@ -380,23 +368,24 @@ static uint8_t CALIB_Measure( double *val )
 static uint8_t CALIB_CheckCompleteCalib( void )
 {
 	int idxScale = DMM_GetScale( 1 );
-	if( !DMM_isScale( idxScale ) )
-		return 0;
+	uint8_t bResult = DMM_isScale( idxScale );
+	if( bResult != ERRVAL_SUCCESS)
+		return bResult;
 
 	if( DMM_isNAN( partCalib.DmmPartCalib[ idxScale ].Calib_Ms_Zero ) ||
 		DMM_isNAN( partCalib.DmmPartCalib[ idxScale ].Calib_Ms_ValP ) ||
 		DMM_isNAN( partCalib.DmmPartCalib[ idxScale ].Calib_Ref_ValP ) )
-		return 0;
+		return ERRVAL_CALIB_NANDOUBLE;
 
 	if( DMM_isDC( idxScale ) && (
 		DMM_isNAN( partCalib.DmmPartCalib[ idxScale ].Calib_Ms_ValN ) ||
 		DMM_isNAN( partCalib.DmmPartCalib[ idxScale ].Calib_Ref_ValN ) ) )
-		return 0;
+		return ERRVAL_CALIB_NANDOUBLE;
 
 	calib[ idxScale ].Mult = CALIB_ComputeMult( idxScale );
 	calib[ idxScale ].Add = CALIB_ComputeAdd( idxScale );
 	partCalib.DmmPartCalib[ idxScale ].fCalibDirty = 1;			// needs to be written to FLASH
-	return 1;
+	return ERRVAL_SUCCESS;
 }
 
 /***	CALIB_CalibOnZero
@@ -477,7 +466,8 @@ uint8_t CALIB_CalibOnPositive( double dRefVal, double *pMeasuredVal )
 	if( pMeasuredVal )
 		*pMeasuredVal = dVal;
 
-	partCalib.DmmPartCalib[ idxScale ].Calib_Ms_ValP = dVal;	// store the measured value or NAN on error
+	partCalib.DmmPartCalib[ idxScale ].Calib_Ref_ValP = dRefVal;	// store the reference value
+	partCalib.DmmPartCalib[ idxScale ].Calib_Ms_ValP = dVal;		// store the measured value or NAN on error
 
 	if( bResult == ERRVAL_SUCCESS )
 		CALIB_CheckCompleteCalib();		// check if the calibration data is complete
@@ -522,7 +512,8 @@ uint8_t CALIB_CalibOnNegative( double dRefVal, double *pMeasuredVal )
 	if( pMeasuredVal )
 		*pMeasuredVal = dVal;
 
-	partCalib.DmmPartCalib[ idxScale ].Calib_Ms_ValN = dVal;	// store the measured value or NAN on error
+	partCalib.DmmPartCalib[ idxScale ].Calib_Ref_ValN = dRefVal;	// store the reference value
+	partCalib.DmmPartCalib[ idxScale ].Calib_Ms_ValN = dVal;		// store the measured value or NAN on error
 
 	if( bResult == ERRVAL_SUCCESS )
 		CALIB_CheckCompleteCalib();	// check if the calibration data is complete

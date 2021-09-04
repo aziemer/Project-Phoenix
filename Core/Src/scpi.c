@@ -154,7 +154,7 @@ TRANSLATE FUNC1_table[] = {
 
 TRANSLATE FUNC2_table[] = {
 	{ SCPI_FREQ,		DmmFrequency },
-	{ SCPI_NONE,		DmmNone },
+	{ SCPI_NONE,		DmmIllegal },
 	{ -1,				DmmIllegal }
 };
 
@@ -550,6 +550,35 @@ char *SCPI_Execute( char *command_string )
 				break;
 			}
 			break;
+
+		case SCPI_CAL:
+			switch( keyword[idx] )
+			{
+			case SCPI_SEC:	break;		// no password needed
+
+			case SCPI_VAL:
+				if( num_parm == 0 )
+					break;
+
+				parse_value( parameter[0], &val, unit, sizeof(unit) );
+				s = val;
+
+				if( s > 1 )
+				{
+					if( num_parm < 2 ) break;
+					parse_value( parameter[1], &val, unit, sizeof(unit) );
+				}
+
+				switch( s )
+				{
+				case 0:	CALIB_CalibOnZero( NULL ); break;				// zero
+				case 1:	CALIB_CalibOnPositive( val, NULL ); break;		// positive
+				case 2: CALIB_CalibOnNegative( val, NULL ); break;		// negative (DC and TEMP only)
+				}
+				break;
+			}
+			break;
+
 		}
 	}
 

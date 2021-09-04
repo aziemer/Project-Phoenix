@@ -284,8 +284,9 @@
 #if (USE_HAL_UART_REGISTER_CALLBACKS == 1)
 void UART_InitCallbacksToDefault(UART_HandleTypeDef *huart);
 #endif /* USE_HAL_UART_REGISTER_CALLBACKS */
-static void UART_EndTxTransfer(UART_HandleTypeDef *huart);
 static void UART_EndRxTransfer(UART_HandleTypeDef *huart);
+#ifdef HAL_DMA_MODULE_ENABLED
+static void UART_EndTxTransfer(UART_HandleTypeDef *huart);
 static void UART_DMATransmitCplt(DMA_HandleTypeDef *hdma);
 static void UART_DMAReceiveCplt(DMA_HandleTypeDef *hdma);
 static void UART_DMATxHalfCplt(DMA_HandleTypeDef *hdma);
@@ -296,6 +297,7 @@ static void UART_DMATxAbortCallback(DMA_HandleTypeDef *hdma);
 static void UART_DMARxAbortCallback(DMA_HandleTypeDef *hdma);
 static void UART_DMATxOnlyAbortCallback(DMA_HandleTypeDef *hdma);
 static void UART_DMARxOnlyAbortCallback(DMA_HandleTypeDef *hdma);
+#endif
 static HAL_StatusTypeDef UART_Transmit_IT(UART_HandleTypeDef *huart);
 static HAL_StatusTypeDef UART_EndTransmit_IT(UART_HandleTypeDef *huart);
 static HAL_StatusTypeDef UART_Receive_IT(UART_HandleTypeDef *huart);
@@ -1381,6 +1383,7 @@ HAL_StatusTypeDef HAL_UART_Receive_IT(UART_HandleTypeDef *huart, uint8_t *pData,
   }
 }
 
+#ifdef HAL_DMA_MODULE_ENABLED
 /**
   * @brief  Sends an amount of data in DMA mode.
   * @note   When UART parity is not enabled (PCE = 0), and Word Length is configured to 9 bits (M1-M0 = 01),
@@ -1602,7 +1605,7 @@ HAL_StatusTypeDef HAL_UART_DMAStop(UART_HandleTypeDef *huart)
 
   return HAL_OK;
 }
-
+#endif
 /**
   * @brief Receive an amount of data in blocking mode till either the expected number of data is received or an IDLE event occurs.
   * @note   HAL_OK is returned if reception is completed (expected number of data has been received)
@@ -1788,7 +1791,7 @@ HAL_StatusTypeDef HAL_UARTEx_ReceiveToIdle_IT(UART_HandleTypeDef *huart, uint8_t
     return HAL_BUSY;
   }
 }
-
+#ifdef HAL_DMA_MODULE_ENABLED
 /**
   * @brief Receive an amount of data in DMA mode till either the expected number of data is received or an IDLE event occurs.
   * @note   Reception is initiated by this function call. Further progress of reception is achieved thanks
@@ -1849,7 +1852,7 @@ HAL_StatusTypeDef HAL_UARTEx_ReceiveToIdle_DMA(UART_HandleTypeDef *huart, uint8_
     return HAL_BUSY;
   }
 }
-
+#endif
 /**
   * @brief  Abort ongoing transfers (blocking mode).
   * @param  huart UART handle.
@@ -1879,6 +1882,7 @@ HAL_StatusTypeDef HAL_UART_Abort(UART_HandleTypeDef *huart)
   {
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAT);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Abort the UART DMA Tx channel: use blocking DMA Abort API (no callback) */
     if (huart->hdmatx != NULL)
     {
@@ -1897,6 +1901,7 @@ HAL_StatusTypeDef HAL_UART_Abort(UART_HandleTypeDef *huart)
         }
       }
     }
+#endif
   }
 
   /* Disable the UART DMA Rx request if enabled */
@@ -1904,6 +1909,7 @@ HAL_StatusTypeDef HAL_UART_Abort(UART_HandleTypeDef *huart)
   {
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAR);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Abort the UART DMA Rx channel: use blocking DMA Abort API (no callback) */
     if (huart->hdmarx != NULL)
     {
@@ -1922,6 +1928,7 @@ HAL_StatusTypeDef HAL_UART_Abort(UART_HandleTypeDef *huart)
         }
       }
     }
+#endif
   }
 
   /* Reset Tx and Rx transfer counters */
@@ -1961,6 +1968,7 @@ HAL_StatusTypeDef HAL_UART_AbortTransmit(UART_HandleTypeDef *huart)
   {
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAT);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Abort the UART DMA Tx channel : use blocking DMA Abort API (no callback) */
     if (huart->hdmatx != NULL)
     {
@@ -1979,6 +1987,7 @@ HAL_StatusTypeDef HAL_UART_AbortTransmit(UART_HandleTypeDef *huart)
         }
       }
     }
+#endif
   }
 
   /* Reset Tx transfer counter */
@@ -2019,6 +2028,7 @@ HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *huart)
   {
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAR);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Abort the UART DMA Rx channel : use blocking DMA Abort API (no callback) */
     if (huart->hdmarx != NULL)
     {
@@ -2037,6 +2047,7 @@ HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *huart)
         }
       }
     }
+#endif
   }
 
   /* Reset Rx transfer counter */
@@ -2077,6 +2088,7 @@ HAL_StatusTypeDef HAL_UART_Abort_IT(UART_HandleTypeDef *huart)
     CLEAR_BIT(huart->Instance->CR1, (USART_CR1_IDLEIE));
   }
 
+#ifdef HAL_DMA_MODULE_ENABLED
   /* If DMA Tx and/or DMA Rx Handles are associated to UART Handle, DMA Abort complete callbacks should be initialised
      before any call to DMA Abort functions */
   /* DMA Tx Handle is valid */
@@ -2107,13 +2119,14 @@ HAL_StatusTypeDef HAL_UART_Abort_IT(UART_HandleTypeDef *huart)
       huart->hdmarx->XferAbortCallback = NULL;
     }
   }
-
+#endif
   /* Disable the UART DMA Tx request if enabled */
   if (HAL_IS_BIT_SET(huart->Instance->CR3, USART_CR3_DMAT))
   {
     /* Disable DMA Tx at UART level */
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAT);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Abort the UART DMA Tx channel : use non blocking DMA Abort API (callback) */
     if (huart->hdmatx != NULL)
     {
@@ -2130,6 +2143,7 @@ HAL_StatusTypeDef HAL_UART_Abort_IT(UART_HandleTypeDef *huart)
         AbortCplt = 0x00U;
       }
     }
+#endif
   }
 
   /* Disable the UART DMA Rx request if enabled */
@@ -2137,6 +2151,7 @@ HAL_StatusTypeDef HAL_UART_Abort_IT(UART_HandleTypeDef *huart)
   {
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAR);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Abort the UART DMA Rx channel : use non blocking DMA Abort API (callback) */
     if (huart->hdmarx != NULL)
     {
@@ -2154,6 +2169,7 @@ HAL_StatusTypeDef HAL_UART_Abort_IT(UART_HandleTypeDef *huart)
         AbortCplt = 0x00U;
       }
     }
+#endif
   }
 
   /* if no DMA abort complete callback execution is required => call user Abort Complete callback */
@@ -2208,6 +2224,7 @@ HAL_StatusTypeDef HAL_UART_AbortTransmit_IT(UART_HandleTypeDef *huart)
   {
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAT);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Abort the UART DMA Tx channel : use blocking DMA Abort API (no callback) */
     if (huart->hdmatx != NULL)
     {
@@ -2223,6 +2240,7 @@ HAL_StatusTypeDef HAL_UART_AbortTransmit_IT(UART_HandleTypeDef *huart)
       }
     }
     else
+#endif
     {
       /* Reset Tx transfer counter */
       huart->TxXferCount = 0x00U;
@@ -2292,6 +2310,7 @@ HAL_StatusTypeDef HAL_UART_AbortReceive_IT(UART_HandleTypeDef *huart)
   {
     CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAR);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Abort the UART DMA Rx channel : use blocking DMA Abort API (no callback) */
     if (huart->hdmarx != NULL)
     {
@@ -2307,6 +2326,7 @@ HAL_StatusTypeDef HAL_UART_AbortReceive_IT(UART_HandleTypeDef *huart)
       }
     }
     else
+#endif
     {
       /* Reset Rx transfer counter */
       huart->RxXferCount = 0x00U;
@@ -2424,6 +2444,7 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *huart)
         {
           CLEAR_BIT(huart->Instance->CR3, USART_CR3_DMAR);
 
+#ifdef HAL_DMA_MODULE_ENABLED
           /* Abort the UART DMA Rx channel */
           if (huart->hdmarx != NULL)
           {
@@ -2437,6 +2458,7 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *huart)
             }
           }
           else
+#endif
           {
             /* Call user error callback */
 #if (USE_HAL_UART_REGISTER_CALLBACKS == 1)
@@ -2486,6 +2508,7 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *huart)
   {
     __HAL_UART_CLEAR_IDLEFLAG(huart);
 
+#ifdef HAL_DMA_MODULE_ENABLED
     /* Check if DMA mode is enabled in UART */
     if (HAL_IS_BIT_SET(huart->Instance->CR3, USART_CR3_DMAR))
     {
@@ -2531,6 +2554,7 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *huart)
       return;
     }
     else
+#endif
     {
       /* DMA mode not enabled */
       /* Check received length : If all expected data are received, do nothing.
@@ -2971,6 +2995,8 @@ void UART_InitCallbacksToDefault(UART_HandleTypeDef *huart)
 }
 #endif /* USE_HAL_UART_REGISTER_CALLBACKS */
 
+#ifdef HAL_DMA_MODULE_ENABLED
+
 /**
   * @brief  DMA UART transmit process complete callback.
   * @param  hdma  Pointer to a DMA_HandleTypeDef structure that contains
@@ -3060,7 +3086,7 @@ static void UART_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
   /* Check current reception Mode :
      If Reception till IDLE event has been selected : use Rx Event callback */
   if (huart->ReceptionType == HAL_UART_RECEPTION_TOIDLE)
-  {  
+  {
 #if (USE_HAL_UART_REGISTER_CALLBACKS == 1)
     /*Call registered Rx Event callback*/
     huart->RxEventCallback(huart, huart->RxXferSize);
@@ -3153,6 +3179,7 @@ static void UART_DMAError(DMA_HandleTypeDef *hdma)
   HAL_UART_ErrorCallback(huart);
 #endif /* USE_HAL_UART_REGISTER_CALLBACKS */
 }
+#endif
 
 /**
   * @brief  This function handles UART Communication Timeout.
@@ -3226,6 +3253,7 @@ HAL_StatusTypeDef UART_Start_Receive_IT(UART_HandleTypeDef *huart, uint8_t *pDat
   return HAL_OK;
 }
 
+#ifdef HAL_DMA_MODULE_ENABLED
 /**
   * @brief  Start Receive operation in DMA mode.
   * @note   This function could be called by all HAL UART API providing reception in DMA mode.
@@ -3295,6 +3323,7 @@ static void UART_EndTxTransfer(UART_HandleTypeDef *huart)
   /* At end of Tx process, restore huart->gState to Ready */
   huart->gState = HAL_UART_STATE_READY;
 }
+#endif
 
 /**
   * @brief  End ongoing Rx transfer on UART peripheral (following error detection or Reception completion).
@@ -3318,6 +3347,7 @@ static void UART_EndRxTransfer(UART_HandleTypeDef *huart)
   huart->ReceptionType = HAL_UART_RECEPTION_STANDARD;
 }
 
+#ifdef HAL_DMA_MODULE_ENABLED
 /**
   * @brief  DMA UART communication abort callback, when initiated by HAL services on Error
   *         (To be called at end of DMA Abort procedure following error occurrence).
@@ -3488,6 +3518,7 @@ static void UART_DMARxOnlyAbortCallback(DMA_HandleTypeDef *hdma)
   HAL_UART_AbortReceiveCpltCallback(huart);
 #endif /* USE_HAL_UART_REGISTER_CALLBACKS */
 }
+#endif
 
 /**
   * @brief  Sends an amount of data in non blocking mode.
@@ -3633,7 +3664,7 @@ static HAL_StatusTypeDef UART_Receive_IT(UART_HandleTypeDef *huart)
       else
       {
        /* Standard reception API called */
-#if (USE_HAL_UART_REGISTER_CALLBACKS == 1)		  
+#if (USE_HAL_UART_REGISTER_CALLBACKS == 1)
        /*Call registered Rx complete callback*/
        huart->RxCpltCallback(huart);
 #else

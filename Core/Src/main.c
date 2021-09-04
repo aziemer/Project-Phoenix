@@ -20,7 +20,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "rtc.h"
-#include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
@@ -94,7 +93,6 @@ int main(void)
   MX_RTC_Init();
   MX_USART1_UART_Init();
   MX_USB_DEVICE_Init();
-  MX_TIM1_Init();
 
   /* USER CODE BEGIN 2 */
   TFT_Init();

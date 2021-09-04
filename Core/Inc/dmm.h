@@ -43,11 +43,12 @@
 #define ERRVAL_CMD_BUSY                 0xF1    // Measurement in progress
 #define ERRVAL_CALIB_MISSINGMEASUREMENT 0xF0    // A measurement must be performed before calling the finalize calibration.
 
+#define ERRVAL_OVERFLOW					0xEF
+
 #define DMM_DIODEOPENTHRESHOLD			3
 
 enum DMM_MODE {
 	DmmIllegal = -1,
-	DmmNone,
 	DmmResistance,
 	DmmResistance4W,
 	DmmDCVoltage,
@@ -124,7 +125,8 @@ enum DM_SCALE {
 	SCALE_UP,
 	SCALE_DOWN,
 	SCALE_ALT,
-	SCALE_NONE
+	SCALE_NONE,
+	SCALE_PERCENT
 };
 
 #define DMM_VALIDDATA_CNTTIMEOUT    0x100   // number of valid data retrieval re-tries
@@ -139,8 +141,9 @@ enum DM_SCALE {
 typedef struct _DMMCFG{
     int mode;			// scale
     double range;		// full scale range
+    char *fmt;			// display format, i.e. "%-2.3f"
     uint8_t sw;			// switch bits
-    uint8_t cfg[20];	// configuration bits: 0x20...0x33
+    uint8_t cfg[21];	// configuration bits: 0x1F...0x33
     double mul;			// dmm measurement (ad1/rms) multiplication factor to get value in corresponding unit
 } DMMCFG;
 
@@ -219,14 +222,17 @@ typedef struct {
     union { uint8_t reg; struct { uint8_t SAD1I:2; uint8_t SFT1:2; uint8_t ENXI:1; uint8_t ENOSC:1; uint8_t OP1CHOP:2; }; }											R33;		// 0x33
     union { uint8_t reg; struct { uint8_t _NO:2; uint8_t SDO23:1; uint8_t SVXI:1; uint8_t AD3RG:1; uint8_t ENCHOPAD3:1; uint8_t _NO2:1; uint8_t ENAD3:1; }; }		R34;		// 0x34
     union { uint8_t reg; struct { uint8_t _NO:2; uint8_t AD3IG:2; uint8_t SAD3IN:2; uint8_t SAD3IP:2; }; }															R35;		// 0x35
-    union { uint8_t reg; struct { uint8_t SPHACAL; }; }																												R36;		// 0x36
-    union { uint8_t reg; struct { uint8_t RESET; }; }																												R37;		// 0x37
+    union { uint8_t reg; uint8_t SPHACAL; }																															R36;		// 0x36
+    uint8_t																																							R37;		// 0x37
 } __attribute__((__packed__)) DMMREGISTERS;
 
 extern const DMMCFG dmmcfg[];
 extern const char * const dmmranges[];
 
-extern double dRawVal[NUM_CHANNELS];
+extern uint32_t currCTA, currCTB, currCTC;
+extern int32_t currAD1, currAD2, currAD3;
+extern int64_t currRMS;
+
 extern double dMeasuredVal[NUM_CHANNELS];
 
 uint8_t	DMM_SetScale( uint8_t ch, int idxScale );
@@ -235,10 +241,11 @@ int		DMM_FindScale( int mode, double range );
 
 int		DMM_GetMode( int idxScale );
 double	DMM_GetRange( int idxScale );
-uint8_t	DMM_GetScaleUnit( uint8_t channel, double *pdScaleFact, char *szUnitPrefix, char *szUnit, char *szRange );
+uint8_t	DMM_GetScaleUnit( uint8_t scale, double *pdScaleFact, char *szUnitPrefix, char *szUnit, char *szRange );
+const char *DMM_GetFormat( int idxScale );
 
 // value functions
-int		DMM_Ready( uint8_t channel );
+uint8_t	DMM_Ready( uint8_t channel );
 void	DMM_Trigger( uint8_t channel );
 uint8_t	DMM_Measure( uint8_t channel );
 
@@ -247,6 +254,9 @@ char	DMM_GetUseCalib( uint8_t channel );
 
 void	DMM_SetAveraging( uint8_t channel, uint8_t nAvg );
 uint8_t	DMM_GetAveraging( uint8_t channel );
+
+void	DMM_SetGateTime( uint16_t ms );
+uint16_t DMM_GetGateTime( void );
 
 uint8_t	DMM_isNAN( double dVal );
 
