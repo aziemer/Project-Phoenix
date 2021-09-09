@@ -38,6 +38,7 @@
 #define FONT_10X16	1
 #define FONT_16X24	2
 #define FONT_32X50	3
+#define FONT_32X48	4
 
 #define RGB(r,g,b)	(((uint16_t)b*0x1F)/100) | ((((uint16_t)g*0x3F)/100)<<5) | ((((uint16_t)r*0x1F)/100)<<11)
 

@@ -86,6 +86,21 @@
 
 #define START_REPEAT			50
 
+typedef void (*CALLBACK)(uint8_t,int);
+
+typedef struct {
+	char *legend1;			// 1st or middle line
+	char *legend2;			// 2nd line
+	CALLBACK callback;
+	uint8_t cbChannel;
+	int cbValue;
+} BUTTON;
+
+typedef struct {
+	char *legend;
+	BUTTON button[5];
+} MENU;
+
 void DrawDot( uint16_t color );
 
 void SetHold( int mode );

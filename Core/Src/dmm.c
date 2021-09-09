@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "stm32f1xx_hal.h"
+#include "rtc.h"
 
 #include "scpi.h"
 #include "calib.h"
@@ -30,12 +31,14 @@ const DMMCFG dmmcfg[] = {
 { DmmDCVoltage,		5e2,	"%+7.2f",	0x21,	{0x04, 0xC0,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x20,0x00,0x90,0x00,0x28, 0xA0,0x80,0xC7,0x33,0xA8}, 125e1  / 1.8 / 0x800000 },	// 500 V DC
 { DmmDCVoltage,		1e3,	"%+7.4f",	0x21,	{0x04, 0xC0,0x21,0x14,0x8B,0x09,0x01,0x08,0x15,0x31,0xF8, 0x20,0x00,0x90,0x00,0x28, 0xA0,0x80,0xC7,0x33,0xA8}, 125e1  / 0.9 / 0x800000 },	// 1kV DC
 
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
 { DmmACVoltage,		5e-1,	"%7.2f",	0x01,	{0x11, 0x10,0xDD,0x00,0x00,0x45,0x00,0x88,0x15,0x31,0xF8, 0x00,0x00,0x00,0x00,0x08, 0x91,0x80,0xC7,0x3C,0xA0}, 1e-5 },						// 500 mV AC
 { DmmACVoltage,		5e0,	"%7.4f",	0x21,	{0x11, 0x10,0xDD,0x00,0x00,0x4D,0x00,0x88,0x15,0x31,0xF8, 0x22,0x00,0x00,0xD0,0x88, 0xA0,0xE9,0xC7,0x38,0x20}, 1e-4 },						// 5 V AC
 { DmmACVoltage,		5e1,	"%7.3f",	0x21,	{0x11, 0x10,0xDD,0x00,0x00,0x4D,0x00,0x88,0x15,0x31,0xF8, 0x22,0x00,0x00,0x09,0x28, 0xA0,0xFF,0xC7,0x38,0x20}, 1e-3 },						// 50 V AC
 { DmmACVoltage,		5e2,	"%7.2f",	0x21,	{0x11, 0x10,0xDD,0x00,0x00,0x4D,0x00,0x88,0x15,0x31,0xF8, 0x22,0x00,0x90,0x00,0x28, 0xA0,0x80,0xC7,0x38,0x20}, 1e-2 },						// 500 V AC
-{ DmmACVoltage,		1e3,	"%7.2f",	0x21,	{0x11, 0x10,0xDD,0x00,0x00,0x4D,0x00,0x88,0x15,0x31,0xF8, 0x22,0x00,0x90,0x00,0x28, 0xA0,0x80,0xC7,0x38,0x20}, 1e-1 },						// 750 V AC
+{ DmmACVoltage,		7.5e2,	"%7.2f",	0x21,	{0x11, 0x10,0xDD,0x00,0x00,0x4D,0x00,0x88,0x15,0x31,0xF8, 0x22,0x00,0x90,0x00,0x28, 0xA0,0x80,0xC7,0x38,0x20}, 1e-2 },						// 750 V AC
 
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
 { DmmDCCurrent,		5e-4,	"%+7.2f",	0x20,	{0x04, 0xC0,0x21,0x14,0x8B,0x35,0x11,0x08,0x15,0x11,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0xAC}, 125e-5 / 1.8 / 0x800000 },	// 500uA DC
 { DmmDCCurrent,		5e-3,	"%+7.4f",	0x20,	{0x04, 0xC0,0x21,0x14,0x8B,0x95,0x11,0x08,0x15,0x11,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x33,0xAC}, 125e-4 / 1.8 / 0x800000 },	// 5mA DC
 { DmmDCCurrent,		5e-2,	"%+7.3f",	0x22,	{0x04, 0xC0,0x21,0x14,0x8B,0x35,0x11,0x08,0x15,0x11,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0xAC}, 125e-3 / 1.8 / 0x800000 },	// 50mA DC
@@ -43,6 +46,7 @@ const DMMCFG dmmcfg[] = {
 { DmmDCCurrent,		5e0,	"%+7.4f",	0x29,	{0x04, 0xC0,0x21,0x14,0x8B,0x35,0x11,0x08,0x15,0x11,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0xAC}, 125e-1 / 1.8 / 0x800000 },	// 5 A DC
 { DmmDCCurrent,		10e0,	"%+7.3f",	0x29,	{0x04, 0xC0,0x21,0x14,0x8B,0x35,0x01,0x08,0x15,0x11,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0xAC}, 125e-1 / 0.9 / 0x800000 },	// 10 A DC
 
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
 { DmmACCurrent,		5e-4,	"%7.2f",	0x20,	{0x11, 0x10,0xDD,0x12,0x00,0x45,0x01,0x88,0x15,0x31,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0x20}, 1e-8 / 1.08 },				// 500 uA AC
 { DmmACCurrent,		5e-3,	"%7.4f",	0x20,	{0x11, 0x10,0xDD,0x12,0x00,0x45,0x00,0x88,0x15,0x31,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0xA0}, 1e-7 / 2.16 },				// 5 mA AC
 { DmmACCurrent,		5e-2,	"%7.3f",	0x22,	{0x11, 0x10,0xDD,0x12,0x00,0x45,0x01,0x88,0x15,0x31,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0x20}, 1e-6 / 1.08 },				// 50 mA AC
@@ -50,6 +54,7 @@ const DMMCFG dmmcfg[] = {
 { DmmACCurrent,		5e0,	"%7.4f",	0x29,	{0x11, 0x10,0xDD,0x12,0x00,0x45,0x01,0x88,0x15,0x31,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0x20}, 1e-4 / 1.08 },				// 5 A AC
 { DmmACCurrent,		10e0,	"%7.3f",	0x29,	{0x11, 0x10,0xDD,0x12,0x00,0x45,0x00,0x88,0x15,0x31,0xF8, 0x00,0x00,0x00,0x00,0x00, 0xA0,0x80,0xC7,0x3D,0xA0}, 1e-4 / 2.16 },				// 10 A AC
 
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
 { DmmResistance,	5e1,	"%7.3f",	0x05,	{0x04, 0x60,0x62,0x13,0x83,0x85,0x01,0x08,0x15,0x00,0xF8, 0x00,0x40,0x06,0x00,0x00, 0x94,0x80,0xD2,0x3F,0xAC}, 1e3 / 0.9 / 0x800000 },		// 50 Ohm
 { DmmResistance,	5e2,	"%7.2f",	0x05,	{0x04, 0xC0,0x21,0x14,0x83,0x85,0x01,0x08,0x15,0x00,0xF8, 0x00,0x00,0x06,0x00,0x00, 0x94,0x80,0xD2,0x3F,0xAC}, 1e3 / 0.9 / 0x800000 },		// 500 Ohm
 { DmmResistance,	5e3,	"%7.4f",	0x05,	{0x04, 0xC0,0x21,0x14,0x83,0x85,0x01,0x08,0x15,0x00,0xF8, 0x00,0x00,0x60,0x00,0x00, 0x94,0x80,0xD3,0x3F,0xAC}, 1e4 / 0.9 / 0x800000 },		// 5 kOhm
@@ -58,25 +63,30 @@ const DMMCFG dmmcfg[] = {
 { DmmResistance,	5e6,	"%7.4f",	0x05,	{0x04, 0xC0,0x21,0x14,0x93,0x85,0x01,0x08,0x15,0x55,0xF8, 0x00,0x00,0x00,0x80,0x00, 0x86,0x80,0xD1,0x3F,0xAC}, 6e6 / 0.9 / 0x800000 },		// 5 MOhm
 { DmmResistance,	5e7,	"%7.3f",	0x05,	{0x04, 0xC0,0x21,0x14,0x93,0x85,0x01,0x08,0x15,0x55,0xF8, 0x00,0x08,0x00,0x00,0x00, 0x86,0x80,0xD1,0x3F,0xAC}, 6e7 / 0.9 / 0x800000 },		// 50 MOhm
 
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
 { DmmResistance4W,	5e2,	"%7.2f",	0x05,	{0x04, 0xC0,0x21,0x14,0x83,0xA7,0x01,0x08,0x15,0x00,0xF8, 0x00,0x00,0x06,0x00,0x00, 0x94,0x80,0xD2,0x3F,0xAC}, 1e3 / 0.9 / 0x800000 },		// 500 Ohm
 { DmmResistance4W,	5e3,	"%7.4f",	0x05,	{0x04, 0xC0,0x21,0x14,0x83,0xA7,0x01,0x08,0x15,0x00,0xF8, 0x00,0x00,0x60,0x00,0x00, 0x94,0x80,0xD3,0x3F,0xAC}, 1e4 / 0.9 / 0x800000 },		// 5 kOhm
 { DmmResistance4W,	5e4,	"%7.3f",	0x05,	{0x04, 0xC0,0x21,0x14,0x83,0xA7,0x01,0x08,0x15,0x00,0xF8, 0x00,0x00,0x00,0x06,0x00, 0x94,0x80,0xD3,0x3F,0xAC}, 1e5 / 0.9 / 0x800000 },		// 50 kOhm
 
-{ DmmCapacitance,	5e-8,	"%7.3f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x08,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2.5e-12 },	// CAP LOW		// 50nF (Mode I - CTx)
-{ DmmCapacitance,	5e-7,	"%7.2f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x08,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2.5e-12 },	// have all		// 500nF
-{ DmmCapacitance,	5e-6,	"%7.4f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x08,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2.5e-12 },	// the same		// 5uF
-{ DmmCapacitance,	5e-5,	"%7.3f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x08,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2.5e-12 },	// register		// 50uF
-{ DmmCapacitance,	5e-4,	"%7.2f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x08,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2.5e-12 },	// settings		// 500uF
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
+{ DmmCapacitance,	5e-8,	"%7.3f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x08,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2.5e-12 },					// 50nF (Mode I - CTx)
+{ DmmCapacitance,	5e-7,	"%7.2f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x08,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2.5e-12 },					// 500nF
+{ DmmCapacitance,	5e-6,	"%7.4f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x08,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2.5e-12 },					// 5uF
+{ DmmCapacitance,	5e-5,	"%7.3f",	0x05,	{0x01, 0x70,0x21,0x14,0x8B,0x01,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x80,0x00,0x00, 0x9A,0x80,0xD7,0x33,0xA8}, 2e-11 },						// 50uF
+{ DmmCapacitance,	5e-4,	"%7.2f",	0x05,	{0x01, 0x70,0x21,0x04,0x8A,0xA5,0x00,0x00,0x00,0x55,0x00, 0x00,0x08,0x08,0x00,0x00, 0x8E,0x00,0xC2,0x0E,0x20}, 6.7e-11 },					// 500 uF
+{ DmmCapacitance,	5e-3,	"%7.4f",	0x05,	{0x01, 0x50,0x21,0x00,0x00,0x00,0x11,0x00,0x50,0x11,0x00, 0x00,0x00,0x08,0x00,0x00, 0x9A,0x00,0xC2,0x3C,0x20}, 1.33e-9 },					// 5 mF
+{ DmmCapacitance,	5e-2,	"%7.3f",	0x05,	{0x01, 0x50,0x21,0x00,0x00,0x00,0x11,0x00,0x50,0x11,0x00, 0x00,0x00,0x08,0x00,0x00, 0x9A,0x00,0xC2,0x3C,0x20}, 1.33e-9 },					// 10 mF
 
-{ DmmCapacitance,	5e-3,	"%7.4f",	0x05,	{0x04, 0xC0,0x21,0x07,0x93,0x85,0x11,0x08,0x15,0x55,0xF8, 0x80,0x00,0x08,0x00,0x00, 0x86,0x80,0xD1,0x33,0xAC}, 1e-5 },						// 5mF (Mode II - AD1)
-{ DmmCapacitance,	5e-2,	"%7.3f",	0x05,	{0x04, 0x70,0xDE,0x07,0x93,0x85,0x11,0x08,0x15,0x55,0xF8, 0x80,0x00,0x08,0x00,0x00, 0x8F,0x80,0xDA,0x33,0xAC}, 1e-5 },						// 50mF
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
+{ DmmFrequency,		1e7,	"%8.1f",	0x05,	{0x01, 0xC8,0xDE,0x07,0x93,0x85,0x11,0x08,0x15,0x55,0xF8, 0x00,0x00,0x00,0x00,0x00, 0x80,0x80,0xD7,0x33,0xAC}, 1e0 },						// Frequency
 
-{ DmmFrequency,		6e7,	"%8.0f",	0x05,	{0x01, 0xC8,0xDE,0x07,0x93,0x85,0x11,0x08,0x15,0x55,0xF8, 0x00,0x00,0x00,0x00,0x00, 0x80,0x80,0xD7,0x33,0xAC}, 1e0 },						// Frequency
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
+{ DmmTemperature,	8e2,	"%+7.2f",	0x01,	{0x04, 0xC0,0xDE,0x14,0x8B,0x85,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x00,0x08, 0x81,0x80,0xC7,0x33,0xA8}, 1.25e1 / 1.8 / 0x800000 },	// Temperature (thermo couple)
 
-{ DmmTemperature,	8e2,	"%+7.2f",	0x01,	{0x04, 0xC0,0xDE,0x14,0x8B,0x85,0x11,0x08,0x15,0x31,0xF8, 0x00,0x00,0x00,0x00,0x08, 0x81,0x80,0xC7,0x33,0xA8}, 125e3 / 1.8 / 0x800000 },	// Temperature (thermo couple)
-
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
 { DmmContinuity,	5e2,	"%7.3f",	0x05,	{0x04, 0x60,0x62,0x13,0x83,0x85,0x01,0x08,0x15,0x00,0xF8, 0x00,0x40,0x06,0x00,0x00, 0x94,0x80,0xD2,0x3F,0xAC}, 1e3 / 0.9 / 0x800000 },		// Continuity
 
+// Measure type,	FSR,	fmt,		sw,		 INTE  R20, R21, R22, R23, R24, R25, R26, R27, R28, R29,  R2A, R2B, R2C, R2D, R2E,  R2F, R30, R31, R32, R33,   mult
 { DmmDiode,			3e0,	"%7.4f",	0x05,	{0x04, 0x10,0x62,0x13,0x8B,0x8D,0x11,0x08,0x15,0x11,0xF8, 0x00,0x00,0x08,0x00,0x00, 0x86,0x80,0xE2,0x33,0xAC}, 1e-6 / 1.08 }				// Diode
 };
 
@@ -118,8 +128,7 @@ enum {
 
 double dMeasuredVal[3];
 uint32_t currCTA, currCTB, currCTC;
-int32_t currAD1, currAD2, currAD3;
-int64_t currRMS;
+double currAD1, currAD2, currAD3, currRMS;
 uint8_t DMM_Status = 0;
 
 static DMMREGISTERS dmmRegs;
@@ -136,6 +145,7 @@ static uint8_t fUseCalib[NUM_CHANNELS];					// controls if calibration coefficie
 static uint8_t nAvgPasses[NUM_CHANNELS];				// total number of averaging passes to do
 static uint8_t nAvgCount[NUM_CHANNELS];					// 0: current measurement finished, else number of passes still to go
 static uint32_t measurement_start;
+static uint8_t tempunits = TEMP_CELSIUS;
 
 static void DelayAprox10Us( int n )
 {
@@ -348,44 +358,27 @@ uint8_t DMM_SetScale( uint8_t channel, int idxScale )
 	dmmRegs.R37 = 0x60;												// "If register Address=37h, write-in Data=60h, the IC will Reset."
 	DMM_SendCmdSPI( CS_DMM, REG_37, 1, &dmmRegs.R37 );
 
-//	DelayAprox10Us( 1000 );											// 10ms
-
 	// Retrieve current Scale information (register setting, switch settings, calibration, etc.)
 	idxCurrentScale[channel] = idxScale;
 	curCal = &calib[idxScale];
 	curCfg = &dmmcfg[idxScale];
 
-	if( DMM_isAC( idxScale ) )
-		idxScale = SCALE_FREQ;
-
 	// Set CTA start values
-	switch( idxScale )
-	{
-	// GateTime = ( 0x1000000 - CTA ) / SysFreq => CTA = 1000000h - GateTime * SysFreq	[GateTime in s]
-//	case SCALE_FREQ:	CTA_Initial = 0x1000000 - CRYSTAL; break;		// 1s
-	case SCALE_FREQ:	CTA_Initial = 0x1000000 - CRYSTAL / 10; break;	// 0.1s
-//	case SCALE_FREQ:	CTA_Initial = 0x1000000 - CRYSTAL / 100; break;	// 10ms
+	if(		 DMM_isAC( idxScale ) )		CTA_Initial = 0x1000000 - CRYSTAL/10;	// 0.1s, for secondary scale
+	else if( DMM_isCAP( idxScale ) )	CTA_Initial = 0xE00000;
+	else								CTA_Initial = 0x1000000 - CRYSTAL/10;	// 1s, FREQ
 
-	case SCALE_50_nF:
-	case SCALE_500_nF:	CTA_Initial = 0x1000000 - CRYSTAL; break;		// 1s
-
-	case SCALE_5_uF:
-	case SCALE_50_uF:	CTA_Initial = 0x1000000 - CRYSTAL/10; break;	// 100ms
-
-	case SCALE_500_uF:	CTA_Initial = 0x1000000 - CRYSTAL/100; break;	// 10ms
-	}
-
-	// clear all shadow registers to zero
+	// clear all shadow registers to zero, then insert configuration values for INTE and R20 thru R33
 	memset( &dmmRegs, 0, sizeof(dmmRegs) );
-
-	// copy configuration values for INTE and R20 thru R33
 	memcpy( &dmmRegs.INTE.reg, curCfg->cfg, sizeof(curCfg->cfg) );
 
-	// copy complete register set to HY3131 (AD1..R37), clearing ADCs, counters and interrupt flags
+	// now copy complete register set to HY3131 (AD1..R37), clearing ADCs, counters and interrupt flags
 	DMM_SendCmdSPI( CS_DMM, REG_AD1, sizeof(dmmRegs), (uint8_t*)&dmmRegs );
 
 	// set the relays and switches
 	DMM_ConfigSwitches( curCfg->sw );
+
+	HAL_RTCEx_BKUPWrite( &hrtc, RTC_BKP_DR2, idxScale );
 
 	return ERRVAL_SUCCESS;
 }
@@ -406,7 +399,7 @@ int DMM_FindScale( int mode, double range )
 	for( idxScale = 0; idxScale < DMM_CNTSCALES; ++idxScale )
 	{
 		if( DMM_GetMode( idxScale ) == mode &&
-			DMM_GetRange( idxScale ) == range )
+			DMM_GetRange( idxScale ) >= range )
 		{
 			return idxScale;
 		}
@@ -447,6 +440,17 @@ double DMM_GetRange( int idxScale )
 {
 	if( DMM_isScale( idxScale ) != ERRVAL_SUCCESS ) return 0.0;
 	return dmmcfg[idxScale].range;
+}
+
+void DMM_SetTempUnits( uint8_t units )
+{
+	if( units >= TEMP_CELSIUS && units <= TEMP_KELVIN )
+		tempunits = units;
+}
+
+uint8_t	DMM_GetTempUnits( void )
+{
+	return tempunits;
 }
 
 const char *DMM_GetFormat( int idxScale )
@@ -704,10 +708,15 @@ uint8_t DMM_GetScaleUnit( uint8_t scale, double *pdScaleFact, char *szUnitPrefix
 	{
 		DMMCFG const *cfg = &dmmcfg[scale];
 
+		if( scale == SCALE_TEMP )
+		{
+			*pdScaleFact = 1e0;	szUnitPrefix[0] = 0;
+		}
+
 		if( pdScaleFact && szUnitPrefix )
 		{
 			if( scale == SCALE_FREQ ||
-				scale == SCALE_TEMP )	{ *pdScaleFact = 1e0;	szUnitPrefix[0] = 0; }
+				scale == SCALE_TEMP )		{ *pdScaleFact = 1e0;	szUnitPrefix[0] = 0; }
 			else if( cfg->range < 1e-9 )	{ *pdScaleFact = 1e12;	szUnitPrefix[0] = 'p'; }
 			else if( cfg->range < 1e-6 )	{ *pdScaleFact = 1e9;	szUnitPrefix[0] = 'n'; }
 			else if( cfg->range < 1e-3 )	{ *pdScaleFact = 1e6;	szUnitPrefix[0] = 'u'; }
@@ -723,17 +732,29 @@ uint8_t DMM_GetScaleUnit( uint8_t scale, double *pdScaleFact, char *szUnitPrefix
 		{
 			switch( cfg->mode )
 			{
-			case DmmDiode:			strcpy( szUnit, "V" ); break;
+			case DmmDCVoltage:			strcpy( szUnit, "V=" ); break;
+			case DmmDCCurrent:			strcpy( szUnit, "A=" ); break;
+			case DmmACVoltage:			strcpy( szUnit, "V~" ); break;
+			case DmmACCurrent:			strcpy( szUnit, "A~" ); break;
+
 			case DmmResistance:
 			case DmmResistance4W:
-			case DmmContinuity:		strcpy( szUnit, "Ohm" ); break;
-			case DmmTemperature:	strcpy( szUnit, "'C" ); break;
-			case DmmCapacitance:	strcpy( szUnit, "'F" ); break;
-			case DmmDCVoltage:		strcpy( szUnit, "V DC" ); break;
-			case DmmDCCurrent:		strcpy( szUnit, "A DC" ); break;
-			case DmmACVoltage:		strcpy( szUnit, "V AC" ); break;
-			case DmmACCurrent:		strcpy( szUnit, "A AC" ); break;
-			case DmmFrequency:		strcpy( szUnit, "Hz" ); break;
+			case DmmContinuity:			strcpy( szUnit, "Ohm" ); break;
+
+			case DmmDiode:				strcpy( szUnit, "V" ); break;
+
+			case DmmTemperature:
+				switch( tempunits )
+				{
+				case TEMP_KELVIN:		strcpy( szUnit, "K" ); break;
+				case TEMP_FAHRENHEIT:	strcpy( szUnit, "'F" ); break;
+				default:				strcpy( szUnit, "'C" ); break;
+				}
+				break;
+
+			case DmmCapacitance:		strcpy( szUnit, "F" ); break;
+
+			case DmmFrequency:			strcpy( szUnit, "Hz" ); break;
 			}
 		}
 
@@ -745,73 +766,11 @@ uint8_t DMM_GetScaleUnit( uint8_t scale, double *pdScaleFact, char *szUnitPrefix
 	return bResult;
 }
 
-static void DMM_ReloadCounters( uint8_t R20, uint32_t CTA )
-{
-	R20 &= ~2;
-	DMM_SendCmdSPI( CS_DMM, REG_20, 1, &R20 );			// write R20=X0h - ENCTR=0 (disable counters, reset CTB and CTC)
-
-	dmmRegs.CTA[0] = CTA & 0xFF;
-	dmmRegs.CTA[1] = ( CTA >> 8 ) & 0xFF;
-	dmmRegs.CTA[2] = ( CTA >> 16 ) & 0xFF;
-	DMM_SendCmdSPI( CS_DMM, REG_CTA, 3, dmmRegs.CTA );	// write CTA (preset counter)
-
-	R20 |= 2;
-	DMM_SendCmdSPI( CS_DMM, REG_20, 1, &R20 );			// write R20=X2h - ENCTR=1 (re-enable counters)
-}
-
-static void DMM_StartMeasurement( int scale )
-{
-	if( scale == SCALE_FREQ || DMM_isAC( scale ) ||
-		( scale >= SCALE_50_nF && scale <= SCALE_500_uF ) )	// mode I -> using counters
-	{
-		DMM_ReloadCounters( curCfg->cfg[1], CTA_Initial );
-	}
-	else if( scale >= SCALE_5_mF && scale <= SCALE_50_mF )	// mode II -> using AD1
-	{
-		uint8_t i;
-#if 1
-		i = 0x00; DMM_SendCmdSPI( CS_DMM, 0x2A, 1, &i );	// write R2A=00h - P0=0000 P1=0000	(is 0x80 from init : PS1=1)
-		i = 0x00; DMM_SendCmdSPI( CS_DMM, 0x2C, 1, &i );	// write R2C=00h - P4=0000 P5=0000	(is 0x08 from init : PS4=1)
-		DelayAprox10Us( 1000 );
-#endif
-		i = 0x4C; DMM_SendCmdSPI( CS_DMM, 0x20, 1, &i );	// write R20=4Ch - SCMPI=000, ENCMP=1, ENCNTI=1, ENPCMPO=1, ENCTR=0 (enable PCMP output -> discharge?)
-		DelayAprox10Us( 1000 );
-		i = 0x48; DMM_SendCmdSPI( CS_DMM, 0x20, 1, &i );	// write R20=48h - SCMPI=000, ENCMP=1, ENCNTI=1, ENPCMPO=0, ENCTR=0 (disable PCMP output)
-#if 0
-		i = 0x00; DMM_SendCmdSPI( CS_DMM, 0x2A, 1, &i );	// write R2A=00h again. TODO: do we need to do this?
-		i = 0x00; DMM_SendCmdSPI( CS_DMM, 0x2C, 1, &i );	// write R2C=00h again. TODO: do we need to do this?
-#endif
-	}
-
-	dMeasuredVal[0] = NAN;
-	dMeasuredVal[1] = NAN;
-	dMeasuredVal[2] = NAN;
-
-	DMM_Status = 0;
-}
-
-void DMM_Trigger( uint8_t channel )
-{
-	if( --channel >= NUM_CHANNELS ) return;
-
-	DMM_Status = 0;
-
-	// clear summing buffer and set number of loops
-	dValAvg[channel] = 0.0;
-	nAvgCount[channel] = nAvgPasses[channel];
-
-	// start 1st measurement
-	DMM_StartMeasurement( idxCurrentScale[channel] );
-
-	// init timeout counter
-	measurement_start = HAL_GetTick();
-}
-
-static uint8_t DMM_GetResults( uint8_t scale )
+static uint8_t DMM_ReadResults( uint8_t scale )
 {
 	if( HAL_GPIO_ReadPin( GPIOB, SPI_MISO ) == GPIO_PIN_SET )		// MISO pin goes high if any interrupt flag in INTF becomes set
 	{
-		DMM_GetCmdSPI( REG_INTF, 1, &dmmRegs.INTF.reg );			// read INTF register to see which flag (register gets reset after read)
+		DMM_GetCmdSPI( REG_INTF, 1, &dmmRegs.INTF.reg );			// read INTF register to see which flag (INTF register gets reset to zero after read)
 
 		if( dmmRegs.INTF.CTF )
 		{
@@ -824,37 +783,96 @@ static uint8_t DMM_GetResults( uint8_t scale )
 			for( i = 0; i < 3; ++i ) currCTB = ( currCTB << 8 ) | dmmRegs.CTB[2-i];
 			for( i = 0; i < 3; ++i ) currCTC = ( currCTC << 8 ) | dmmRegs.CTC[2-i];
 
-			if( dmmRegs.CTSTA.CTBOV == 0 )
-				DMM_Status |= RESULT_CT;
+			if( dmmRegs.CTSTA.CTBOV )
+				currCTB = 0;
+
+			DMM_Status |= RESULT_CT;
 		}
 
 		if( dmmRegs.INTF.AD1F )
 		{
 			DMM_GetCmdSPI( REG_AD1, 3, dmmRegs.AD1 );				// read AD1 register
 
-			currAD1 = ( (int32_t)dmmRegs.AD1[ 2 ] << 24 )
-					| ( (int32_t)dmmRegs.AD1[ 1 ] << 16 )
-					| ( (int32_t)dmmRegs.AD1[ 0 ] << 8 );
-			currAD1 /= 0x100;										// sign extend
+			int32_t ad1 = ( (int32_t)dmmRegs.AD1[ 2 ] << 24 )
+						| ( (int32_t)dmmRegs.AD1[ 1 ] << 16 )
+						| ( (int32_t)dmmRegs.AD1[ 0 ] << 8 );
+			ad1 /= 0x100;
+
+			if(		 ad1 >= 0x7FFFFE )	currAD1 = +INFINITY;		// value outside convertor range
+			else if( ad1 <= -0x7FFFFE )	currAD1 = -INFINITY;		// value outside convertor range
+			else						currAD1 = ad1;
 			DMM_Status |= RESULT_AD1;
 		}
 
 		if( dmmRegs.INTF.RMSF )
 		{
 			DMM_GetCmdSPI( REG_RMS, 5, dmmRegs.RMS );				// read RMS register (RMS is 40-bits wide, with  !)
-//			dmmRegs.RMS[0] &= ~0x0F;								// mute noise on 4 LSBs
+			dmmRegs.RMS[0] &= ~0x0F;								// mute noise on 4 LSBs
 
-			currRMS = ( (int64_t)dmmRegs.RMS[ 4 ] << 56 )
-					| ( (int64_t)dmmRegs.RMS[ 3 ] << 48 )
-					| ( (int64_t)dmmRegs.RMS[ 2 ] << 40 )
-					| ( (int64_t)dmmRegs.RMS[ 1 ] << 32 )
-					| ( (int64_t)dmmRegs.RMS[ 0 ] << 24 );
-			currRMS >>= 24;
+			int64_t rms = ( (int64_t)dmmRegs.RMS[ 4 ] << 56 )
+						| ( (int64_t)dmmRegs.RMS[ 3 ] << 48 )
+						| ( (int64_t)dmmRegs.RMS[ 2 ] << 40 )
+						| ( (int64_t)dmmRegs.RMS[ 1 ] << 32 )
+						| ( (int64_t)dmmRegs.RMS[ 0 ] << 24 );
+			currRMS = rms >> 24;
 			DMM_Status |= RESULT_RMS;
 		}
 	}
 
 	return DMM_Status;
+}
+
+static void DMM_ReloadCounters( uint8_t R20 )
+{
+	R20 &= 0xFC;										// ENCTR=0 (disable counters, reset CTB and CTC)
+	DMM_SendCmdSPI( CS_DMM, REG_20, 1, &R20 );			// write R20
+
+	dmmRegs.CTA[0] =   CTA_Initial         & 0xFF;
+	dmmRegs.CTA[1] = ( CTA_Initial >>  8 ) & 0xFF;
+	dmmRegs.CTA[2] = ( CTA_Initial >> 16 ) & 0xFF;
+	DMM_SendCmdSPI( CS_DMM, REG_CTA, 3, dmmRegs.CTA );	// write CTA (preset counter)
+
+	R20 |= 2;
+	DMM_SendCmdSPI( CS_DMM, REG_20, 1, &R20 );			// ENCTR=1 (re-enable counters and start counting)
+}
+
+static void DMM_StartMeasurement( int scale )
+{
+	// clear all shadow registers to zero, then insert configuration values for INTE and R20 thru R33
+	memset( &dmmRegs, 0, sizeof(dmmRegs) );
+	memcpy( &dmmRegs.INTE.reg, curCfg->cfg, sizeof(curCfg->cfg) );
+
+	// now copy complete register set to HY3131 (AD1..R37), clearing ADCs, counters and interrupt flags
+	DMM_SendCmdSPI( CS_DMM, REG_AD1, sizeof(dmmRegs), (uint8_t*)&dmmRegs );
+
+	if( scale == SCALE_FREQ ||
+		DMM_isAC( scale ) ||
+		( scale >= SCALE_50_nF && scale <= SCALE_50_mF ) )
+	{
+		DMM_ReloadCounters( curCfg->cfg[REG_20 - 0x1F] );
+	}
+	DMM_Status = 0;
+
+	// init timeout counter
+	measurement_start = HAL_GetTick();
+}
+
+void DMM_Trigger( uint8_t channel )
+{
+	if( --channel >= NUM_CHANNELS ) return;
+
+	uint8_t idxScale = idxCurrentScale[channel];
+
+	// clear summing buffer and set number of loops
+	dValAvg[channel] = 0.0;
+	nAvgCount[channel] = nAvgPasses[channel];
+
+	dMeasuredVal[0] = 0,0;
+	dMeasuredVal[1] = 0,0;
+	dMeasuredVal[2] = 0.0;
+
+	// start 1st measurement
+	DMM_StartMeasurement( idxScale );
 }
 
 /***	DMM_Measure
@@ -894,13 +912,15 @@ uint8_t DMM_Measure( uint8_t channel )
 		case DmmDiode:
 		case DmmResistance:
 		case DmmResistance4W:	dMeasuredVal[channel] = +INFINITY; break;
+
 		default:				dMeasuredVal[channel] = 0; break;
 		}
-		nAvgCount[channel] = 0;
+		nAvgCount[channel] = 0;					// clear pending measurements for this trigger
+
 		return ERRVAL_SUCCESS;
 	}
 
-	if( !DMM_GetResults( scale ) )
+	if( !DMM_ReadResults( scale ) )
 		return ERRVAL_CMD_BUSY;
 
 	// Compute result, according to the specific scale
@@ -908,41 +928,24 @@ uint8_t DMM_Measure( uint8_t channel )
 	{
 		if( DMM_Status & RESULT_CT )
 		{
-			/*
-			 * Tgate = ( 0x1000000 - CTA_Init ) / Fsys
-			 * => CTA_init = 0x1000000 - Tgate * Fsys			// Tgate in [s]
-			 *
-			 * T = ( 0x1000000 - CTA_init + CTA ) / Fsys
-			 * F = CTB / T
-			 * D = CTC / ( 0x1000000 - CTA_init + CTA )
-			 *
-			 * T = ( 0x1000000 - ( 0x1000000 - Tgate * Fsys ) ) / Fsys
-			 * T = ( 0x1000000 - 0x1000000 + Tgate * Fsys ) / Fsys
-			 * T = ( Tgate * Fsys ) / Fsys
-			 * T = Tgate
-			 *
-			 * rearranged to
-			 *
-			 * T1 = 0x1000000 - CTA_init + CTA
-			 * F = CTB / ( T1 / Fsys ) = TCB * Fsys / T1
-			 * D = CTC / T1
-			 *
-			 * T1 = 0x1000000 - ( 0x1000000 - Tgate * Fsys ) + CTA
-			 * T1 = 0x1000000 - 0x1000000 + Tgate * Fsys + CTA
-			 * T1 = Tgate * Fsys + CTA
-			 *
-			 * F = CTB * Fsys / ( Tgate * Fsys + CTA )
-			 */
-			uint32_t T1 = 0x1000000 - CTA_Initial + currCTA;
-			if( T1 != 0 )
+			if( currCTB != 0 )
 			{
-				dVal = (double)currCTB * CRYSTAL / T1;				// frequency [Hz]
-				dMeasuredVal[1] = 100.0 * currCTC / T1;				// duty cycle [%]
+				/*
+				 * T = 0x1000000 - CTA_init + CTA
+				 * F = TCB * Fsys / T
+				 * D = CTC / T
+				 */
+				uint32_t T1 = 0x1000000 - CTA_Initial + currCTA;
+				if( T1 != 0 )
+				{
+					dVal = (double)currCTB * CRYSTAL / T1;				// frequency [Hz]
+					dMeasuredVal[1] = 100.0 * currCTC / T1;				// duty cycle [%]
+				}
+				bResult = ERRVAL_SUCCESS;
 			}
-			bResult = ERRVAL_SUCCESS;
 		}
 	}
-	else if( scale >= SCALE_50_nF && scale <= SCALE_500_uF )		// Read Mode I
+	else if( DMM_isCAP( scale ) )
 	{
 		if( DMM_Status & RESULT_CT )
 		{
@@ -958,34 +961,22 @@ uint8_t DMM_Measure( uint8_t channel )
 			bResult = ERRVAL_SUCCESS;
 		}
 	}
-	else if( scale >= SCALE_5_mF && scale <= SCALE_50_mF )			// Read Mode II
-	{
-		if( DMM_Status & RESULT_AD1 )
-		{
-			if(		 currAD1 >= 0x7FFFFE )	dVal = +INFINITY;		// value outside convertor range
-			else if( currAD1 <= -0x7FFFFE )	dVal = -INFINITY;		// value outside convertor range
-			else
-			{
-				dVal = currAD1;
-
-				if( fUseCalib[channel] )							// apply calibration coefficients
-					dVal = dVal * curCal->Mult + curCal->Add;
-
-				dVal *= curCfg->mul;								// apply scaling factor
-			}
-			bResult = ERRVAL_SUCCESS;
-		}
-	}
 	else if( DMM_isAC( scale ) )									// AC uses RMS & CT
 	{
+#if 0
 		if( DMM_Status & RESULT_CT )
 		{
-			uint32_t T1 = 0x1000000 - CTA_Initial + currCTA;
-			if( T1 != 0 )
+			if( currCTB != 0 )
 			{
-				dMeasuredVal[1] = (double)currCTB * CRYSTAL / T1;	// frequency [Hz]
-//				dMeasuredVal[2] = 100.0 * currCTC / T1;				// duty cycle [%]
+				uint32_t T1 = 0x1000000 - CTA_Initial + currCTA;
+				if( T1 != 0 )
+				{
+					dMeasuredVal[1] = (double)currCTB * CRYSTAL / T1;	// frequency [Hz]
+					dMeasuredVal[2] = 100.0 * currCTC / T1;				// duty cycle [%]
+				}
 			}
+
+			DMM_ReloadCounters( curCfg->cfg[REG_20 - 0x1F] );
 		}
 
 		if( DMM_Status & RESULT_RMS )
@@ -996,18 +987,37 @@ uint8_t DMM_Measure( uint8_t channel )
 				dVal = fabs( pow( curCal->Mult, 2 ) * dVal - pow( curCal->Add, 2 ) );
 
 			dVal *= pow( curCfg->mul, 2 );							// apply scaling factor, dVal is already squared
-		}
-
-//		if( ( DMM_Status & (RESULT_RMS|RESULT_CT) ) == (RESULT_RMS|RESULT_CT) )
 			bResult = ERRVAL_SUCCESS;
+		}
+#else
+		if( ( DMM_Status & (RESULT_CT|RESULT_RMS) ) == (RESULT_CT|RESULT_RMS) )
+		{
+			if( currCTB != 0 )
+			{
+				uint32_t T1 = 0x1000000 - CTA_Initial + currCTA;
+				if( T1 != 0 )
+				{
+					dMeasuredVal[1] = (double)currCTB * CRYSTAL / T1;	// frequency [Hz]
+					dMeasuredVal[2] = 100.0 * currCTC / T1;				// duty cycle [%]
+				}
+			}
+
+			dVal = currRMS;
+
+			if( fUseCalib[channel] )								// apply calibration coefficients
+				dVal = fabs( pow( curCal->Mult, 2 ) * dVal - pow( curCal->Add, 2 ) );
+
+			dVal *= pow( curCfg->mul, 2 );							// apply scaling factor, dVal is already squared
+			bResult = ERRVAL_SUCCESS;
+		}
+#endif
 	}
-	else															// DC, RES, DIODE, CONT, TEMP use AD1
+	else	// DC, RES, DIODE, CONT, TEMP
 	{
 		if( DMM_Status & RESULT_AD1 )
 		{
-			if(		 currAD1 >= 0x7FFFFE )	dVal = +INFINITY;		// value outside convertor range
-			else if( currAD1 <= -0x7FFFFE )	dVal = -INFINITY;		// value outside convertor range
-			else
+			if( !DMM_isNAN( currAD1 ) &&
+				currAD1 != +INFINITY && currAD1 != -INFINITY )
 			{
 				dVal = currAD1;
 
@@ -1015,6 +1025,15 @@ uint8_t DMM_Measure( uint8_t channel )
 					dVal = dVal * curCal->Mult + curCal->Add;
 
 				dVal *= curCfg->mul;								// apply scaling factor
+
+				if( scale == SCALE_TEMP )
+				{
+					switch( tempunits )
+					{
+					case TEMP_KELVIN:		dVal += 273.15; break;
+					case TEMP_FAHRENHEIT:	dVal = dVal * 9.0 / 5.0 + 32.0; break;
+					}
+				}
 			}
 
 			bResult = ERRVAL_SUCCESS;

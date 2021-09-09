@@ -49,6 +49,7 @@
 
 enum DMM_MODE {
 	DmmIllegal = -1,
+
 	DmmResistance,
 	DmmResistance4W,
 	DmmDCVoltage,
@@ -59,7 +60,11 @@ enum DMM_MODE {
 	DmmFrequency,
 	DmmTemperature,
 	DmmContinuity,
-	DmmDiode
+	DmmDiode,
+
+	DMM_CAL_ZERO,
+
+	DMM_CNTMODES
 };
 
 enum DM_SCALE {
@@ -126,7 +131,14 @@ enum DM_SCALE {
 	SCALE_DOWN,
 	SCALE_ALT,
 	SCALE_NONE,
-	SCALE_PERCENT
+	SCALE_PERCENT,
+	SCALE_SAVED
+};
+
+enum {
+	TEMP_CELSIUS	= 1,
+	TEMP_FAHRENHEIT = 2,
+	TEMP_KELVIN		= 3
 };
 
 #define DMM_VALIDDATA_CNTTIMEOUT    0x100   // number of valid data retrieval re-tries
@@ -230,8 +242,7 @@ extern const DMMCFG dmmcfg[];
 extern const char * const dmmranges[];
 
 extern uint32_t currCTA, currCTB, currCTC;
-extern int32_t currAD1, currAD2, currAD3;
-extern int64_t currRMS;
+extern double currAD1, currAD2, currAD3, currRMS;
 
 extern double dMeasuredVal[NUM_CHANNELS];
 
@@ -257,6 +268,9 @@ uint8_t	DMM_GetAveraging( uint8_t channel );
 
 void	DMM_SetGateTime( uint16_t ms );
 uint16_t DMM_GetGateTime( void );
+
+void	DMM_SetTempUnits( uint8_t units );
+uint8_t	DMM_GetTempUnits( void );
 
 uint8_t	DMM_isNAN( double dVal );
 

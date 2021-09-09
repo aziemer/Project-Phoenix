@@ -53,9 +53,9 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "tft.h"
 #include "gfxfont.h"
 
-#include "font32x50.h"
 #include "FreeSansBold9pt7b.h"
 #include "FreeSansBold12pt7b.h"
+#include "font32x50.h"
 
 #if (BOOTLOADER==0)
 const uint16_t tft_init_data[] =		// Command bytes have 0x100 added
